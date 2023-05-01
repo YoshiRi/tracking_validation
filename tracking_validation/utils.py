@@ -10,6 +10,10 @@ from sys import exit
 # if ROS2
 from tf_transformations import euler_from_quaternion
 
+# target objects
+from autoware_auto_perception_msgs.msg import TrackedObject, DetectedObject
+
+
 def getPosition(object):
     """get pose from ros message
     """
@@ -31,13 +35,15 @@ def getOrientation(object):
     """get orientation from ros message
     """
     orientation = object.kinematics.pose_with_covariance.pose.orientation
-    return euler_from_quaternion([orientation.x, orientation.y, orientation.z, orientation.w])
+    return euler_from_quaternion([orientation.x, orientation.y, orientation.z, orientation.w], axes='sxyz')
 
 def getYaw(object):
     """get yaw from ros message
     """
-    orientation = object.kinematics.pose_with_covariance.pose.orientation
-    return euler_from_quaternion(getOrientation(orientation))[2]
+    return getOrientation(object)[2]
+
+def getVX(object):
+    return object.kinematics.twist_with_covariance.twist.linear.x
 
 def getTimeFromStamp(stamp):
     """get time from ros message
@@ -46,6 +52,15 @@ def getTimeFromStamp(stamp):
         return stamp.to_nsec()
     except:
         return None
+    
+def getLabel(obj):
+    max_prob = 0
+    label = None
+    for cl in obj.classification:
+        if cl.probability > max_prob:
+            max_prob = cl.probability
+            label = cl.label
+    return label
 
 def calc2DBboxArea(object):
     """calculate area from detected or tracked object
