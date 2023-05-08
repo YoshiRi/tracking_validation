@@ -25,11 +25,22 @@ def get2DPosition(object):
     """
     return getPosition(object)[:2]
     
-def get2DPositionCovariance(object):
+def get2DPositionCovarianceMatrix(object):
     """ get position covariance from ros message
     """
     pose_with_covariance = object.kinematics.pose_with_covariance
     return np.array([pose_with_covariance.covariance[0],pose_with_covariance.covariance[1], pose_with_covariance.covariance[6], pose_with_covariance.covariance[7]])
+
+def get2DPositionCovariance(object):
+    """get diag x, y, yaw covariance from ros message
+    """
+    pose_with_covariance = object.kinematics.pose_with_covariance
+    return np.array([pose_with_covariance.covariance[0],pose_with_covariance.covariance[7], pose_with_covariance.covariance[35]])
+
+def getVelocityCovariance(object):
+    twist_with_covariance = object.kinematics.twist_with_covariance
+    return np.array([twist_with_covariance.covariance[0],twist_with_covariance.covariance[7], twist_with_covariance.covariance[14],
+                    twist_with_covariance.covariance[21],twist_with_covariance.covariance[28], twist_with_covariance.covariance[35]])
 
 def getOrientation(object):
     """get orientation from ros message

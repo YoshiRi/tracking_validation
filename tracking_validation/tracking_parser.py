@@ -41,7 +41,9 @@ def getTrackerKinematicsList(trackers: list):
 
 def getTrackerKinematicsDict(trackers: list):
     data = {}
-    keys = ["time", "x", "y", "yaw", "vx", "length", "width", "covariance_x", "covariance_y", "covariance_xy", "covariance_yx"]
+    keys = ["time", "x", "y", "yaw", "vx", "length", "width",
+             "covariance_x", "covariance_y", "covariance_xy_matrix",
+             "covariance_vx", "covariance_yaw"]
     for key in keys:
         data[key] = []
 
@@ -54,11 +56,12 @@ def getTrackerKinematicsDict(trackers: list):
         data["vx"].append(getVX(topic))
         data["length"].append(topic.shape.dimensions.x)
         data["width"].append(topic.shape.dimensions.y)
-        cov = get2DPositionCovariance(topic)
-        data["covariance_x"].append(cov[0])
-        data["covariance_y"].append(cov[2])
-        data["covariance_xy"].append(cov[1])
-        data["covariance_yx"].append(cov[3])
+        cov2d = get2DPositionCovariance(topic)
+        data["covariance_x"].append(cov2d[0])
+        data["covariance_y"].append(cov2d[1])
+        data["covariance_yaw"].append(cov2d[2])
+        data["covariance_xy_matrix"].append(get2DPositionCovariance(topic))
+        data["covariance_vx"].append(getVelocityCovariance(topic)[0])
     return data
 
 
@@ -81,7 +84,7 @@ class TrackingParser:
     
     def plot_data(self, x_key = "time", y_keys = [],**kwargs):
         if len(y_keys) == 0:
-            y_keys = ["x", "y", "yaw", "vx", "covariance_x", "covariance_y"]
+            y_keys = ["x", "y", "yaw", "vx", "covariance_x", "covariance_vx"]
         
         legend = ["track_" + str(i) for i in range(len(self.track_ids))]
 
