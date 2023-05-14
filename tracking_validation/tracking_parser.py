@@ -100,3 +100,62 @@ class TrackingParser:
             axs[i].grid()
             axs[i].legend(legend)
         return fig, axs    
+
+
+
+def getDetectionData(bagfile, topic_name = "/perception/object_recognition/detection/objects"):
+    topic_dict = get_topics_as_dict(bagfile, [topic_name])[topic_name]
+    detections = []
+    for stamp, msg in topic_dict:
+        time = stamp
+        for obj in msg.objects:
+            detections.append([time, obj])
+    return detections
+
+def getDetectionKinematicsDicts(detections: list):
+    data = {}
+    keys = ["time", "x", "y", "yaw", "vx", "length", "width"]
+    for key in keys:
+        data[key] = []
+    
+    for time, topic in detections:
+        xy = get2DPosition(topic)
+        yaw = getYaw(topic)
+        vx = getVX(topic)
+        length = topic.shape.dimensions.x
+        width = topic.shape.dimensions.y
+        data["time"].append(time)
+        data["x"].append(xy[0])
+        data["y"].append(xy[1])
+        data["yaw"].append(yaw)
+        data["vx"].append(vx)
+        data["length"].append(length)
+        data["width"].append(width)
+    return data
+
+class DetectionParser:
+    def __init__(self, bagfile: str, topic_name = "/perception/object_recognition/detection/objects") -> None:
+        detections = getDetectionData(bagfile, topic_name)
+        self.data = getDetectionKinematicsDicts(detections)
+
+    def plot_kinematics(self, x_key, y_key, ax = None, **kwargs):
+        if ax is None:
+            fig, ax = plt.subplots()
+        plt_style = kwargs.pop("plt_style", "k.")
+        plt.plot(self.data[x_key], self.data[y_key], plt_style)
+    
+    def plot_data(self, x_key = "time", y_keys = [],**kwargs):
+        if len(y_keys) == 0:
+            y_keys = ["x", "y", "yaw", "vx", "length", "width"]
+        
+        cols = int(kwargs.pop("cols", 2))
+        rows = len(y_keys)//cols + len(y_keys)%cols
+        figsize = (8*cols, 5 * rows)
+        fig, axs = plt.subplots(rows, cols, sharex=True, figsize=figsize)
+        axs = axs.reshape(-1)
+        for i, y_key in enumerate(y_keys):
+            self.plot_kinematics(x_key, y_key, ax=axs[i], **kwargs)   
+            axs[i].set_title(y_key)
+            axs[i].set_xlabel("time [s]")
+            axs[i].grid()
+        return fig, axs
