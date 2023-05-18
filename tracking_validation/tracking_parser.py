@@ -1,4 +1,4 @@
-from rosbag_parser import get_topics_as_dict
+from rosbag_parser import get_topics_as_dict, get_topics_and_tf
 import uuid
 from utils import *
 import matplotlib.pyplot as plt
@@ -12,7 +12,7 @@ def getTrackersInID(tracker_topic_dict):
     trackers = {}
     # get trackers
     for stamp, msg in tracker_topic_dict:
-        time = stamp
+        time = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
         for tracked_obj in msg.objects:
             id = getUUID(tracked_obj)
             if id not in trackers.keys():
@@ -21,7 +21,7 @@ def getTrackersInID(tracker_topic_dict):
     return trackers
 
 def getTrackingData(bagfile, topic_name = "/perception/object_recognition/tracking/objects"):
-    topic_dict = get_topics_as_dict(bagfile, [topic_name])[topic_name]
+    topic_dict, tf_buffer = get_topics_and_tf(bagfile, [topic_name])[topic_name]
     trackers = getTrackersInID(topic_dict)
     return trackers
 
