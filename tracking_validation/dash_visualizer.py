@@ -27,6 +27,25 @@ class_color_map = {
     # Add more colors for additional classes...
 }
 
+
+def generate_rectangle_xy_series(x, y, yaw, length, width):
+    # Calculate the corner points of the rectangle
+    theta = yaw
+    cos_theta = math.cos(theta)
+    sin_theta = math.sin(theta)
+    half_length = length / 2
+    half_width = width / 2
+
+    x0 = x - half_length * cos_theta - half_width * sin_theta
+    y0 = y - half_length * sin_theta + half_width * cos_theta
+    x1 = x + half_length * cos_theta - half_width * sin_theta
+    y1 = y + half_length * sin_theta + half_width * cos_theta
+    x2 = x + half_length * cos_theta + half_width * sin_theta
+    y2 = y + half_length * sin_theta - half_width * cos_theta
+    x3 = x - half_length * cos_theta + half_width * sin_theta
+    y3 = y - half_length * sin_theta - half_width * cos_theta
+    return [x0, x1, x2, x3, x0], [y0, y1, y2, y3, y0]
+
 class object2DVisualizer():
     """visualize object in 2D map with plotly, dash
 
@@ -66,7 +85,7 @@ class object2DVisualizer():
                 id='slider',
                 min=min(obj.timestamp for obj in self.data_list),
                 max=max(obj.timestamp for obj in self.data_list),
-                value=[min(obj.timestamp for obj in data_list), max(obj.timestamp for obj in self.data_list)],
+                value=[min(obj.timestamp for obj in self.data_list), max(obj.timestamp for obj in self.data_list)],
                 marks={i: '{}'.format(i) for i in range(int(min(obj.timestamp for obj in self.data_list)), int(max(obj.timestamp for obj in self.data_list))+1)},
                 step=None
             ),
@@ -90,31 +109,11 @@ class object2DVisualizer():
             traces = []
             for obj in self.data_list:
                 if selected_time_range[0] <= obj.timestamp <= selected_time_range[1] and obj.classification in selected_classes:
-                    x = obj.x
-                    y = obj.y
-                    length = obj.length
-                    width = obj.width
-                    yaw = obj.yaw
-
-                    # Calculate the corner points of the rectangle
-                    theta = yaw
-                    cos_theta = math.cos(theta)
-                    sin_theta = math.sin(theta)
-                    half_length = length / 2
-                    half_width = width / 2
-
-                    x0 = x - half_length * cos_theta - half_width * sin_theta
-                    y0 = y - half_length * sin_theta + half_width * cos_theta
-                    x1 = x + half_length * cos_theta - half_width * sin_theta
-                    y1 = y + half_length * sin_theta + half_width * cos_theta
-                    x2 = x + half_length * cos_theta + half_width * sin_theta
-                    y2 = y + half_length * sin_theta - half_width * cos_theta
-                    x3 = x - half_length * cos_theta + half_width * sin_theta
-                    y3 = y - half_length * sin_theta - half_width * cos_theta
+                    x_series, y_series = generate_rectangle_xy_series(obj.x, obj.y, obj.yaw, obj.length, obj.width)
 
                     traces.append(go.Scatter(
-                        x=[x0, x1, x2, x3, x0],
-                        y=[y0, y1, y2, y3, y0],
+                        x=x_series,
+                        y=y_series,
                         mode="lines",
                         line=dict(color=class_color_map[obj.classification], width=1),
                         fill="toself",
