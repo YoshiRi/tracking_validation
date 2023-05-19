@@ -134,4 +134,35 @@ def calc2DPolygonArea(footprints):
     y = footprints[:,1]
     return 0.5*np.abs(np.dot(x,np.roll(y,1))-np.dot(y,np.roll(x,1)))
 
+
+# get transform from tf
+from rclpy.time import Time
+def get_transform_from_tf(tf_buffer, child_frame_id: str, parent_frame_id: str, stamp):
+    if type(stamp) == Time:
+        target_time = stamp
+    else:
+        target_time = Time(second = stamp)
+    try:
+        transform = tf_buffer.lookup_transform(child_frame_id, parent_frame_id, target_time)
+        return transform
+    except:
+        return None
     
+# get position from transform
+from geometry_msgs.msg import PoseWithCovariance
+def get_pose_from_tansform(transform):
+    pose = PoseWithCovariance()
+    pose.pose.position.x = transform.transform.translation.x
+    pose.pose.position.y = transform.transform.translation.y
+    pose.pose.position.z = transform.transform.translation.z
+    pose.pose.orientation.x = transform.transform.rotation.x
+    pose.pose.orientation.y = transform.transform.rotation.y
+    pose.pose.orientation.z = transform.transform.rotation.z
+    pose.pose.orientation.w = transform.transform.rotation.w
+    return pose
+
+def get_pose_from_tf(tf_buffer, child_frame_id: str, parent_frame_id: str, stamp):
+    transform = get_transform_from_tf(tf_buffer, child_frame_id, parent_frame_id, stamp)
+    if transform == None:
+        return None
+    return get_pose_from_tansform(transform)

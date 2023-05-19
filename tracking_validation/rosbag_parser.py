@@ -16,7 +16,6 @@ from rosbag2_py import *
 from rosidl_runtime_py.utilities import get_message
 from rclpy.serialization import deserialize_message
 import tf2_ros
-from rclpy.time import Time
 
 
 def create_reader(bag_dir: str) -> SequentialReader:
@@ -87,18 +86,6 @@ def get_tf_listener(bagfile:str):
 
     return tf_buffer
 
-
-def get_transform_from_tf(tf_buffer, child_frame_id: str, parent_frame_id: str, stamp):
-    if type(stamp) == Time:
-        target_time = stamp
-    else:
-        target_time = Time(second = stamp)
-    try:
-        transform = tf_buffer.lookup_transform(child_frame_id, parent_frame_id, target_time)
-        return transform
-    except:
-        return None
-    
 def get_topics_and_tf(bagfile:str, topic_list: list):
     tf_buffer = tf2_ros.Buffer()
 
