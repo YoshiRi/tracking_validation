@@ -1,18 +1,23 @@
+# plotly visualizer
 import dash
 from dash import dcc, html
 from dash.dependencies import Input, Output
 import plotly.graph_objects as go
 import math
+import random
 
-
+# selecter
 import tkinter as tk
 from tkinter import filedialog
 
+# data parser
+from tracking_parser import DetctionAndTrackingParser
+from utils import *
 
-
-class data:
-    def __init__(self, timestamp:float, classification: int, 
-                 x:float, y:float, yaw:float, length:float, width:float):
+class DataForVisualize:
+    def __init__(self, timestamp:float = 0.0, classification: int = 0, 
+                 x:float = 0.0, y:float = 0.0, yaw:float = 0.0, length:float = 2.0, width:float = 1.0,
+                 topic_name:str = "default", uuid = None):
         self.timestamp = timestamp
         self.classification = classification
         self.x = x
@@ -20,10 +25,36 @@ class data:
         self.yaw = yaw
         self.length = length
         self.width = width
+        self.topic_name = topic_name
+        self.uuid = uuid
+    
+    def setTopicName(self, topic_name):
+        self.topic_name = topic_name
+
+    def fromPerceptionObjectsWithTime(self, perception_object, time):
+        self.timestamp = time
+        self.classification = getLabel(perception_object)
+        self.x, self.y =  get2DPosition(perception_object)
+        self.yaw = getYaw(perception_object)
+        self.length = perception_object.shape.dimensions.x
+        self.width = perception_object.shape.dimensions.y
+
+    def setRandomState(self):
+        self.x = random.random() * 10
+        self.y = random.random() * 10
+        self.yaw = random.random() * 2 * math.pi
+
 
 class_color_map = {
-    1: "rgb(255, 0, 0)",
+    0: "rgb(200, 200, 200)", # unkown
+    1: "rgb(255, 0, 0)", 
     2: "rgb(0, 255, 0)",
+    3: "rgb(0, 0, 255)",
+    4: "rgb(255, 255, 0)",
+    5: "rgb(255, 0, 255)",
+    6: "rgb(0, 255, 255)",
+    7: "rgb(255, 255, 255)",
+    8: "rgb(0, 0, 0)",
     # Add more colors for additional classes...
 }
 
@@ -46,7 +77,7 @@ def generate_rectangle_xy_series(x, y, yaw, length, width):
     y3 = y - half_length * sin_theta - half_width * cos_theta
     return [x0, x1, x2, x3, x0], [y0, y1, y2, y3, y0]
 
-class object2DVisualizer():
+class object2DVisualizer:
     """visualize object in 2D map with plotly, dash
 
     Returns:
@@ -89,6 +120,13 @@ class object2DVisualizer():
                 marks={i: '{}'.format(i) for i in range(int(min(obj.timestamp for obj in self.data_list)), int(max(obj.timestamp for obj in self.data_list))+1)},
                 step=None
             ),
+            html.Label('visualization topic:'),
+            dcc.Checklist(
+                id='topic-checkbox',
+                options=[{'label': i, 'value': i} for i in set(obj.topic_name for obj in self.data_list)],
+                value=list(set(obj.topic_name for obj in self.data_list)),
+                inline=True
+            ),
             html.Label('visualization class:'),
             dcc.Checklist(
                 id='class-checkbox',
@@ -103,12 +141,13 @@ class object2DVisualizer():
         @self.app.callback(
         Output('graph', 'figure'),
         [Input('slider', 'value'),
+        Input('topic-checkbox', 'value'), 
         Input('class-checkbox', 'value')]
         )
-        def update_figure(selected_time_range, selected_classes):
+        def update_figure(selected_time_range, selected_topics, selected_classes):
             traces = []
             for obj in self.data_list:
-                if selected_time_range[0] <= obj.timestamp <= selected_time_range[1] and obj.classification in selected_classes:
+                if selected_time_range[0] <= obj.timestamp <= selected_time_range[1] and obj.classification in selected_classes and obj.topic_name in selected_topics:
                     x_series, y_series = generate_rectangle_xy_series(obj.x, obj.y, obj.yaw, obj.length, obj.width)
 
                     traces.append(go.Scatter(
@@ -116,7 +155,7 @@ class object2DVisualizer():
                         y=y_series,
                         mode="lines",
                         line=dict(color=class_color_map[obj.classification], width=1),
-                        fill="toself",
+                        fill="none",
                         hoverinfo="none",
                         showlegend=False
                     ))
@@ -125,20 +164,39 @@ class object2DVisualizer():
 
 
     def load_rosbag_data(self, rosbag_file_path: str):
-        #set dummy data
-        self.data_list = [
-            data(timestamp=1.0, classification=1, x=0.0, y=0.0, yaw=0.0, length=2.0, width=1.0),
-            data(timestamp=2.0, classification=2, x=1.0, y=1.0, yaw=1.0, length=3.0, width=2.0),
-            data(timestamp=3.0, classification=1, x=2.0, y=2.0, yaw=0.5, length=2.5, width=1.5),
-            # additional data
-        ]
-        pass
+        # create self.data_list
+        if rosbag_file_path == "dummy":
+            # create dummy data
+            self.data_list = []
+            for i in range(5):
+                viz_data = DataForVisualize()
+                viz_data.setRandomState()
+                viz_data.classification = i
+                self.data_list.append(viz_data)
+            return
+        # parser is written in tracking_parser
+        parser = DetctionAndTrackingParser(rosbag_file_path)
+        # show detection only for now
+        # topic_set is list of [time, DetectedObjects]
+        topic_set = parser.data["/perception/object_recognition/detection/objects"]
+        self.data_list = []
+        for topic in topic_set:
+            time = topic[0]
+            obj = topic[1]
+            viz_data = DataForVisualize()
+            viz_data.fromPerceptionObjectsWithTime(time, obj)
+
+            self.data_list.append(viz_data)
 
     def run_server(self):
         self.app.run_server(debug=True)
 
+
+
+
+
 if __name__ == '__main__':
     #app.run_server(debug=True)
-    fname = "hoge"
+    fname = "dummy"
     visualizer = object2DVisualizer(fname)
     visualizer.run_server()

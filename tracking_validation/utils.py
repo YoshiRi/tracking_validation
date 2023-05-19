@@ -112,7 +112,7 @@ def getLabel(obj):
     max_prob = 0
     label = None
     for cl in obj.classification:
-        if cl.probability > max_prob:
+        if cl.probability >= max_prob:
             max_prob = cl.probability
             label = cl.label
     return label

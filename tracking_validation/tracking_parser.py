@@ -67,6 +67,8 @@ def getTrackerKinematicsDict(trackers: list):
 
 
 class TrackingParser:
+    """parse tracking object from bagfile
+    """
     def __init__(self, bagfile: str, tracking_topic = "/perception/object_recognition/tracking/objects") -> None:
         self.data = getTrackingData(bagfile, tracking_topic)
         self.track_ids = list(self.data.keys())        
@@ -159,3 +161,39 @@ class DetectionParser:
             axs[i].set_xlabel("time [s]")
             axs[i].grid()
         return fig, axs
+    
+class DetctionAndTrackingParser:
+    def __init__(self, bagfile:str, detection_topic = "/perception/object_recognition/detection/objects", tracking_topic = "/perception/object_recognition/tracking/objects") -> None:
+        topic_names = [detection_topic, tracking_topic]
+        topics_dict, tf_buffer = get_topics_and_tf(bagfile, topic_names)
+        self.data = {detection_topic: [], tracking_topic: []}
+        self.max_time = 0
+        self.min_time = 1e10
+        # parse each data
+        for topic_name in topic_names:
+            topics = topics_dict[topic_name]
+            for stamp, msg in topics:
+                time = stamp
+                max_time = max(max_time, time)
+                min_time = min(min_time, time)
+                for obj in msg.objects:
+                    self.data[topic_name].append([time, obj])
+        self.tf_buffer = tf_buffer
+
+    def calc_self_pose(self):
+        # get transform
+        max_obj_num = 100
+        obj_num = min(max_obj_num, len(self.data["tracking_topic"])/10) # assume topic is 10Hz
+        obj_num = max(obj_num, 1)
+        # virtual timestamp
+        times = np.linspace(self.min_time, self.max_time, obj_num)
+        self.self_poses = []
+
+        for time in times:
+            try:
+                pose = get_pose_from_tf(self.tf_buffer, "base_link", "map", time)
+                self.self_poses.append([time, pose])
+            except:
+                continue # do nothing
+        if self.self_poses == []:
+            raise Exception("No tf found self vehicle pose")
