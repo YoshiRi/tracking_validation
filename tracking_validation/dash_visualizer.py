@@ -13,7 +13,8 @@ from tkinter import filedialog
 # data parser
 from tracking_parser import DetctionAndTrackingParser
 from utils import *
-from autoware_auto_perception_msgs.msg import ObjectClassification
+from autoware_auto_perception_msgs.msg import ObjectClassification 
+# object class label: ex) ObjectClassification.BUS == int(3)
 
 class DataForVisualize:
     def __init__(self, timestamp:float = 0.0, classification: int = 0, 
@@ -90,6 +91,9 @@ class object2DVisualizer:
             # select rosbag file from tkinter gui
             rosbag_file_path = self.select_file_gui()
         
+        # init data
+        self.data_list = []
+
         # load rosbag data
         self.load_rosbag_data(rosbag_file_path)    
         # init dash app
@@ -167,37 +171,46 @@ class object2DVisualizer:
                         line=dict(color=class_color_map[obj.classification], width=1),
                         fill="none",
                         hoverinfo="none",
-                        showlegend=True
+                        showlegend=False
                     ))
                     
             return {'data': traces, 'layout': go.Layout(yaxis=dict(scaleanchor='x',), )}
 
+    def create_random_dummy_data(self, num: int):
+        """create dummy data for testing
+
+        Args:
+            num (int): object number
+        """
+        for i in range(num): # 1000 obj ok, 10000 obj ng
+            viz_data = DataForVisualize()
+            viz_data.setRandomState()
+            viz_data.classification = i%7
+            viz_data.timestamp = i / 10.0
+            self.data_list.append(viz_data)
+
 
     def load_rosbag_data(self, rosbag_file_path: str):
-        # create self.data_list
+        """load rosbag data and put data list to self.data_list
+
+        Args:
+            rosbag_file_path (str): _description_
+        """
+        # if name is dummy, set dummy data for debug
         if rosbag_file_path == "dummy":
-            # create dummy data
-            self.data_list = []
-            for i in range(10): # 1000 obj ok, 10000 obj ng
-                viz_data = DataForVisualize()
-                viz_data.setRandomState()
-                viz_data.classification = i%7
-                self.data_list.append(viz_data)
+            self.create_random_dummy_data(10)
             return
+        
         # parser is written in tracking_parser
-        parser = DetctionAndTrackingParser(rosbag_file_path)
-        print("finished parsing")
-        # show detection only for now
-        # topic_set is list of [time, DetectedObjects]
-        topic_set = parser.data["/perception/object_recognition/detection/objects"]
-        self.data_list = []
-        for topic in topic_set:
-            time = topic[0]*1e-9 # ns to sec
-            obj = topic[1]
-            viz_data = DataForVisualize()
-            viz_data.fromPerceptionObjectsWithTime(obj, time)
-            viz_data.topic_name = "/perception/object_recognition/detection/objects"
-            self.data_list.append(viz_data)
+        parser = DetctionAndTrackingParser(rosbag_file_path) # parser.data has dict of topic name and data
+        for topic_name in parser.data:
+            for topic in parser.data[topic_name]:
+                time = topic[0]*1e-9 # ns to sec
+                obj = topic[1]
+                viz_data = DataForVisualize()
+                viz_data.fromPerceptionObjectsWithTime(obj, time)
+                viz_data.topic_name = topic_name
+                self.data_list.append(viz_data)
 
     def run_server(self):
         # do not reload
@@ -206,12 +219,20 @@ class object2DVisualizer:
 
 
 
+def main(rosbag_file_path: str = ""):
+    """main function to run visualizer
 
+    Args:
+        rosbag_file_path (str, optional): _description_. Defaults to "".
+    """
+            # create dummy data
 
-
-
-if __name__ == '__main__':
     fname = "dummy"
     fname = "/home/yoshiri/autoware/inittest/rosbag2_2023_05_09-09_24_48_0.db3"
     visualizer = object2DVisualizer(fname)
     visualizer.run_server()
+
+
+
+if __name__ == '__main__':
+    main()
