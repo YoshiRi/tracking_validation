@@ -174,8 +174,8 @@ class DetctionAndTrackingParser:
             topics = topics_dict[topic_name]
             for stamp, msg in topics:
                 time = stamp
-                max_time = max(max_time, time)
-                min_time = min(min_time, time)
+                self.max_time = max(self.max_time, time)
+                self.min_time = min(self.min_time, time)
                 for obj in msg.objects:
                     self.data[topic_name].append([time, obj])
         self.tf_buffer = tf_buffer

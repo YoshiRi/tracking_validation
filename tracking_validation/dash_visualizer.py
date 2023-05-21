@@ -13,6 +13,7 @@ from tkinter import filedialog
 # data parser
 from tracking_parser import DetctionAndTrackingParser
 from utils import *
+from autoware_auto_perception_msgs.msg import ObjectClassification
 
 class DataForVisualize:
     def __init__(self, timestamp:float = 0.0, classification: int = 0, 
@@ -108,33 +109,43 @@ class object2DVisualizer:
         self.set_dash_app_callback()
 
     def set_dash_app_layout(self):
+        # config data
+        timestamps = [obj.timestamp for obj in self.data_list]
+        min_time = min(timestamps)
+        max_time = max(timestamps)
+        int_min_time = math.floor(min_time)
+        int_max_time = math.floor(max_time) + 1
+        unique_topics = list(set(obj.topic_name for obj in self.data_list))
+        unique_classes = list(set(obj.classification for obj in self.data_list))
+
         self.app = dash.Dash(__name__)
         self.app.layout = html.Div([
             dcc.Graph(id='graph', style={'height': '80vh'}),
-            html.Label('Select timestamp range:'),
+            html.Label('Select timestamp[s] range:'),
             dcc.RangeSlider(
                 id='slider',
-                min=min(obj.timestamp for obj in self.data_list),
-                max=max(obj.timestamp for obj in self.data_list),
-                value=[min(obj.timestamp for obj in self.data_list), max(obj.timestamp for obj in self.data_list)],
-                marks={i: '{}'.format(i) for i in range(int(min(obj.timestamp for obj in self.data_list)), int(max(obj.timestamp for obj in self.data_list))+1)},
+                min=int_min_time,
+                max=int_max_time,
+                value=[int_min_time, int_max_time],
+                marks={i: '{}'.format(i) for i in range(int_min_time, int_max_time+1)},
                 step=None
             ),
             html.Label('visualization topic:'),
             dcc.Checklist(
                 id='topic-checkbox',
-                options=[{'label': i, 'value': i} for i in set(obj.topic_name for obj in self.data_list)],
+                options=[{'label': i, 'value': i} for i in unique_topics],
                 value=list(set(obj.topic_name for obj in self.data_list)),
                 inline=True
             ),
             html.Label('visualization class:'),
             dcc.Checklist(
                 id='class-checkbox',
-                options=[{'label': 'Class {}'.format(i), 'value': i} for i in set(obj.classification for obj in self.data_list)],
+                options=[{'label': 'Class {}'.format(i), 'value': i} for i in unique_classes],
                 value=list(set(obj.classification for obj in self.data_list)),
                 inline=True
             ),
         ], style={'height': '100vh'})
+
 
     def set_dash_app_callback(self):
         # set callback
@@ -149,7 +160,6 @@ class object2DVisualizer:
             for obj in self.data_list:
                 if selected_time_range[0] <= obj.timestamp <= selected_time_range[1] and obj.classification in selected_classes and obj.topic_name in selected_topics:
                     x_series, y_series = generate_rectangle_xy_series(obj.x, obj.y, obj.yaw, obj.length, obj.width)
-
                     traces.append(go.Scatter(
                         x=x_series,
                         y=y_series,
@@ -157,7 +167,7 @@ class object2DVisualizer:
                         line=dict(color=class_color_map[obj.classification], width=1),
                         fill="none",
                         hoverinfo="none",
-                        showlegend=False
+                        showlegend=True
                     ))
                     
             return {'data': traces, 'layout': go.Layout(yaxis=dict(scaleanchor='x',), )}
@@ -168,35 +178,40 @@ class object2DVisualizer:
         if rosbag_file_path == "dummy":
             # create dummy data
             self.data_list = []
-            for i in range(5):
+            for i in range(10): # 1000 obj ok, 10000 obj ng
                 viz_data = DataForVisualize()
                 viz_data.setRandomState()
-                viz_data.classification = i
+                viz_data.classification = i%7
                 self.data_list.append(viz_data)
             return
         # parser is written in tracking_parser
         parser = DetctionAndTrackingParser(rosbag_file_path)
+        print("finished parsing")
         # show detection only for now
         # topic_set is list of [time, DetectedObjects]
         topic_set = parser.data["/perception/object_recognition/detection/objects"]
         self.data_list = []
         for topic in topic_set:
-            time = topic[0]
+            time = topic[0]*1e-9 # ns to sec
             obj = topic[1]
             viz_data = DataForVisualize()
-            viz_data.fromPerceptionObjectsWithTime(time, obj)
-
+            viz_data.fromPerceptionObjectsWithTime(obj, time)
+            viz_data.topic_name = "/perception/object_recognition/detection/objects"
             self.data_list.append(viz_data)
 
     def run_server(self):
-        self.app.run_server(debug=True)
+        # do not reload
+        self.app.run_server(debug=True, use_reloader=False)
+        print("quit dash server!")
+
+
 
 
 
 
 
 if __name__ == '__main__':
-    #app.run_server(debug=True)
     fname = "dummy"
+    fname = "/home/yoshiri/autoware/inittest/rosbag2_2023_05_09-09_24_48_0.db3"
     visualizer = object2DVisualizer(fname)
     visualizer.run_server()
