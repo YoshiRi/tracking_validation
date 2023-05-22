@@ -60,6 +60,18 @@ class_color_map = {
     # Add more colors for additional classes...
 }
 
+class_name_map = {
+    ObjectClassification.UNKNOWN: "Unknown",
+    ObjectClassification.BUS: "Bus",
+    ObjectClassification.CAR: "Car",
+    ObjectClassification.BICYCLE: "Bicycle",
+    ObjectClassification.MOTORCYCLE: "Motorcycle",
+    ObjectClassification.TRUCK: "Truck",
+    ObjectClassification.TRAILER: "Trailer",
+    ObjectClassification.PEDESTRIAN: "Pedestrian"
+}
+
+
 
 def generate_rectangle_xy_series(x, y, yaw, length, width):
     # Calculate the corner points of the rectangle
@@ -85,12 +97,12 @@ class object2DVisualizer:
     Returns:
         _type_: _description_
     """
-    def __init__(self, rosbag_file_path: str = ""):
+    def __init__(self, rosbag_file_path: str = "", topic_names: list = []):
         # load rosbag data
         if rosbag_file_path == "":
             # select rosbag file from tkinter gui
             rosbag_file_path = self.select_file_gui()
-        
+        self.topic_names = topic_names
         # init data
         self.data_list = []
 
@@ -128,10 +140,11 @@ class object2DVisualizer:
             html.Label('Select timestamp[s] range:'),
             dcc.RangeSlider(
                 id='slider',
-                min=int_min_time,
-                max=int_max_time,
-                value=[int_min_time, int_max_time],
-                marks={i: '{}'.format(i) for i in range(int_min_time, int_max_time+1)},
+                min=min_time,
+                max=max_time,
+                value=[min_time, max_time],
+                #marks={i: '{}'.format(i) for i in range(int_min_time, int_max_time+1)},
+                marks={i: '{}'.format(i) for i in timestamps},
                 step=None
             ),
             html.Label('visualization topic:'),
@@ -144,7 +157,7 @@ class object2DVisualizer:
             html.Label('visualization class:'),
             dcc.Checklist(
                 id='class-checkbox',
-                options=[{'label': 'Class {}'.format(i), 'value': i} for i in unique_classes],
+                options=[{'label': class_name_map[i], 'value': i} for i in unique_classes],
                 value=list(set(obj.classification for obj in self.data_list)),
                 inline=True
             ),
@@ -202,7 +215,8 @@ class object2DVisualizer:
             return
         
         # parser is written in tracking_parser
-        parser = DetctionAndTrackingParser(rosbag_file_path) # parser.data has dict of topic name and data
+        parser = DetctionAndTrackingParser(rosbag_file_path, self.topic_names) # parser.data has dict of topic name and data
+        topic_num = 0
         for topic_name in parser.data:
             for topic in parser.data[topic_name]:
                 time = topic[0]*1e-9 # ns to sec
@@ -211,6 +225,8 @@ class object2DVisualizer:
                 viz_data.fromPerceptionObjectsWithTime(obj, time)
                 viz_data.topic_name = topic_name
                 self.data_list.append(viz_data)
+                topic_num += 1
+        print("topic num: {}".format(topic_num))
 
     def run_server(self):
         # do not reload
@@ -219,20 +235,30 @@ class object2DVisualizer:
 
 
 
-def main(rosbag_file_path: str = ""):
+def main(rosbag_file_path: str = "", topics: list = []):
     """main function to run visualizer
 
     Args:
         rosbag_file_path (str, optional): _description_. Defaults to "".
     """
             # create dummy data
-
-    fname = "dummy"
-    fname = "/home/yoshiri/autoware/inittest/rosbag2_2023_05_09-09_24_48_0.db3"
-    visualizer = object2DVisualizer(fname)
+    if rosbag_file_path == "":
+        rosbag_file_path = "dummy"
+        rosbag_file_path = "/home/yoshiri/autoware/inittest/rosbag2_2023_05_09-09_24_48_0.db3"
+    if topics == []:
+        topics = ["/detection/lidar_detector/objects", "/detection/lidar_tracker/objects"]
+    visualizer = object2DVisualizer(rosbag_file_path, topics)
     visualizer.run_server()
 
 
 
 if __name__ == '__main__':
-    main()
+    import argparse
+    p = argparse.ArgumentParser()
+    p.add_argument("--rosbag", type=str, help="rosbag file path", default="")
+    p.add_argument("--topics", nargs='+', help='List of strings', default=[])
+
+    args = p.parse_args()
+    rosbag_file_path = args.rosbag
+    topics = args.topics
+    main(rosbag_file_path, topics)

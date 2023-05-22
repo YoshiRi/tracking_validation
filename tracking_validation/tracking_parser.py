@@ -163,10 +163,14 @@ class DetectionParser:
         return fig, axs
     
 class DetctionAndTrackingParser:
-    def __init__(self, bagfile:str, detection_topic = "/perception/object_recognition/detection/objects", tracking_topic = "/perception/object_recognition/tracking/objects") -> None:
-        topic_names = [detection_topic, tracking_topic]
+    def __init__(self, bagfile:str, topic_names = []) -> None:
+        if topic_names == []:
+            topic_names = ["/perception/object_recognition/detection/objects", "/perception/object_recognition/tracking/objects"]
+
         topics_dict, tf_buffer = get_topics_and_tf(bagfile, topic_names)
-        self.data = {detection_topic: [], tracking_topic: []}
+        self.data = {}
+        for topic_name in topic_names:
+            self.data[topic_name] = []
         self.max_time = 0
         self.min_time = 1e10
         # parse each data
@@ -183,7 +187,7 @@ class DetctionAndTrackingParser:
     def calc_self_pose(self):
         # get transform
         max_obj_num = 100
-        obj_num = min(max_obj_num, len(self.data["tracking_topic"])/10) # assume topic is 10Hz
+        obj_num = min(max_obj_num, (self.max_time - self.min_time)*2)  # assume topic is 2Hz
         obj_num = max(obj_num, 1)
         # virtual timestamp
         times = np.linspace(self.min_time, self.max_time, obj_num)
