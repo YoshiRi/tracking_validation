@@ -18,10 +18,20 @@ from utils import *
 from autoware_auto_perception_msgs.msg import ObjectClassification 
 # object class label: ex) ObjectClassification.BUS == int(3)
 
+# dash colors
+DEFAULT_PLOTLY_COLORS=['rgb(31, 119, 180)', 'rgb(255, 127, 14)',
+            'rgb(44, 160, 44)', 'rgb(214, 39, 40)',
+            'rgb(148, 103, 189)', 'rgb(140, 86, 75)',
+            'rgb(227, 119, 194)', 'rgb(127, 127, 127)',
+            'rgb(188, 189, 34)', 'rgb(23, 190, 207)']
+
+# symbols: circle, square, diamond, cross, x, triangle, pentagon, hexagram, star, diamond, hourglass, bowtie, asterisk, hash
+DEFAULT_MARKER_SYMBOLS = ['circle', 'square', 'diamond', 'cross', 'x', 'triangle', 'pentagon', 'hexagram', 'star', 'diamond', 'hourglass', 'bowtie', 'asterisk', 'hash']
+
 class DataForVisualize:
     def __init__(self, timestamp:float = 0.0, classification: int = 0, 
                  x:float = 0.0, y:float = 0.0, yaw:float = 0.0, length:float = 2.0, width:float = 1.0,
-                 topic_name:str = "default", uuid = None):
+                 topic_name:str = "default", uuid = []):
         self.data = {}
         self.data["time"] = timestamp
         self.data["classification"] = classification
@@ -31,10 +41,14 @@ class DataForVisualize:
         self.data["length"] = length
         self.data["width"] = width
         self.data["topic_name"] = topic_name
-        #self.data["uuid"] = uuid # currently uuid is not used in this class
+        self.data["uuid"] = uuid
+        self.refine_uuid()
     
     def setTopicName(self, topic_name):
         self.data["topic_name"] = topic_name
+
+    def refine_uuid(self):
+        self.data["uuid"] = tuple(self.data["uuid"])
 
     def fromPerceptionObjectsWithTime(self, perception_object, time):
         self.data["time"] = time
@@ -43,6 +57,11 @@ class DataForVisualize:
         self.data["yaw"] = getYaw(perception_object)
         self.data["length"] = perception_object.shape.dimensions.x
         self.data["width"] = perception_object.shape.dimensions.y
+        if type(perception_object) == DetectedObject:
+            self.data["uuid"] = []
+        else:
+            self.data["uuid"] = perception_object.object_id.uuid
+        self.refine_uuid()
 
     def setRandomState(self):
         self.data["time"] = random.random() * 10
@@ -139,6 +158,18 @@ class object2DVisualizer:
         int_max_time = math.floor(max_time) + 1
         unique_topics = self.df["topic_name"].unique()
         unique_classes = self.df["classification"].unique()
+        object_type = ["bounding_box", "object_center"]
+
+        # search unique uuid
+        unique_uuids = self.df["uuid"].unique()
+        self.plot_color_map = {}
+        self.plot_marker_map = {}
+        for uuid in unique_uuids:
+            self.plot_color_map[uuid] = DEFAULT_PLOTLY_COLORS[random.randint(0, len(DEFAULT_PLOTLY_COLORS)-1)]
+        
+        for iter, unique_topic in enumerate(unique_topics):
+            symbol_num = len(DEFAULT_MARKER_SYMBOLS)
+            self.plot_marker_map[unique_topic] = DEFAULT_MARKER_SYMBOLS[iter % symbol_num]
 
         self.app = dash.Dash(__name__)
         self.app.layout = html.Div([
@@ -167,6 +198,13 @@ class object2DVisualizer:
                 value=unique_classes,
                 inline=True
             ),
+            html.Label('visualization mark:'),
+            dcc.Checklist(
+                id='object-mark-checkbox',
+                options=[{'label': i, 'value': i} for i in object_type],
+                value=[object_type[0]],
+                inline=True
+            ),
         ], style={'height': '100vh'})
 
 
@@ -177,11 +215,11 @@ class object2DVisualizer:
         [Input('slider', 'value'),
         Input('topic-checkbox', 'value'), 
         Input('class-checkbox', 'value'),
+        Input('object-mark-checkbox', 'value'),
         State('graph', 'figure')
         ]
         )
-        def update_figure(selected_time_range, selected_topics, selected_classes, figure):
-
+        def update_figure(selected_time_range, selected_topics, selected_classes, selected_object_type, figure):
             traces = []
             # filter df by selected time range
             time_range_condition = (self.df["time"] >= selected_time_range[0]) & (self.df["time"] <= selected_time_range[1])
@@ -194,20 +232,34 @@ class object2DVisualizer:
                 layout = go.Layout(yaxis=dict(scaleanchor='x',), )
             else:
                 layout = figure["layout"]
-
+            
             # generate traces
+            
             for index, row in df_filtered.iterrows():
-                x_series, y_series = generate_rectangle_xy_series(row["x"], row["y"], row["yaw"], row["length"], row["width"])
-                traces.append(go.Scatter(
-                    x=x_series,
-                    y=y_series,
-                    mode="lines",
-                    line=dict(color=class_color_map[row["classification"]], width=1),
-                    fill="none",
-                    hoverinfo="none",
-                    showlegend=False
-                ))
-                    
+                if "bounding_box" in selected_object_type:
+                    x_series, y_series = generate_rectangle_xy_series(row["x"], row["y"], row["yaw"], row["length"], row["width"])
+                    traces.append(go.Scatter(
+                        x=x_series,
+                        y=y_series,
+                        mode="lines",
+                        line=dict(color=class_color_map[row["classification"]], width=1),
+                        fill="none",
+                        hoverinfo="none",
+                        showlegend=False
+                    ))
+
+                if "object_center" in selected_object_type:
+                    traces.append(go.Scatter(
+                        x=[row["x"]],
+                        y=[row["y"]],
+                        mode="markers",
+                        # line with marker with random color
+                        marker=dict(color=self.plot_color_map[row["uuid"]], size=5, symbol=self.plot_marker_map[row["topic_name"]]),
+                        hoverinfo="none",
+                        #label=" ".join(str(x) for x in row["uuid"]),
+                        showlegend=False
+                    ))
+                
             return {'data': traces, 'layout': layout}
 
     def create_random_dummy_data(self, num: int):
