@@ -5,6 +5,8 @@ from dash.dependencies import Input, Output
 import plotly.graph_objects as go
 import math
 import random
+import pandas as pd
+import numpy as np
 
 # selecter
 import tkinter as tk
@@ -20,31 +22,37 @@ class DataForVisualize:
     def __init__(self, timestamp:float = 0.0, classification: int = 0, 
                  x:float = 0.0, y:float = 0.0, yaw:float = 0.0, length:float = 2.0, width:float = 1.0,
                  topic_name:str = "default", uuid = None):
-        self.timestamp = timestamp
-        self.classification = classification
-        self.x = x
-        self.y = y
-        self.yaw = yaw
-        self.length = length
-        self.width = width
-        self.topic_name = topic_name
-        self.uuid = uuid
+        self.data = {}
+        self.data["time"] = timestamp
+        self.data["classification"] = classification
+        self.data["x"] = x
+        self.data["y"] = y
+        self.data["yaw"] = yaw
+        self.data["length"] = length
+        self.data["width"] = width
+        self.data["topic_name"] = topic_name
+        #self.data["uuid"] = uuid # currently uuid is not used in this class
     
     def setTopicName(self, topic_name):
-        self.topic_name = topic_name
+        self.data["topic_name"] = topic_name
 
     def fromPerceptionObjectsWithTime(self, perception_object, time):
-        self.timestamp = time
-        self.classification = getLabel(perception_object)
-        self.x, self.y =  get2DPosition(perception_object)
-        self.yaw = getYaw(perception_object)
-        self.length = perception_object.shape.dimensions.x
-        self.width = perception_object.shape.dimensions.y
+        self.data["time"] = time
+        self.data["classification"] = getLabel(perception_object)
+        self.data["x"], self.data["y"] =  get2DPosition(perception_object)
+        self.data["yaw"] = getYaw(perception_object)
+        self.data["length"] = perception_object.shape.dimensions.x
+        self.data["width"] = perception_object.shape.dimensions.y
 
     def setRandomState(self):
-        self.x = random.random() * 10
-        self.y = random.random() * 10
-        self.yaw = random.random() * 2 * math.pi
+        self.data["time"] = random.random() * 10
+        self.data["classification"] = random.randint(0, 5)
+        self.data["x"] = random.random() * 10
+        self.data["y"] = random.random() * 10
+        self.data["yaw"] = random.random() * 2 * math.pi
+        self.data["length"] = 5
+        self.data["width"] = 2
+
 
 
 class_color_map = {
@@ -103,8 +111,6 @@ class object2DVisualizer:
             # select rosbag file from tkinter gui
             rosbag_file_path = self.select_file_gui()
         self.topic_names = topic_names
-        # init data
-        self.data_list = []
 
         # load rosbag data
         self.load_rosbag_data(rosbag_file_path)    
@@ -126,13 +132,13 @@ class object2DVisualizer:
 
     def set_dash_app_layout(self):
         # config data
-        timestamps = [obj.timestamp for obj in self.data_list]
+        timestamps = self.df["time"].to_list()
         min_time = min(timestamps)
         max_time = max(timestamps)
         int_min_time = math.floor(min_time)
         int_max_time = math.floor(max_time) + 1
-        unique_topics = list(set(obj.topic_name for obj in self.data_list))
-        unique_classes = list(set(obj.classification for obj in self.data_list))
+        unique_topics = self.df["topic_name"].unique()
+        unique_classes = self.df["classification"].unique()
 
         self.app = dash.Dash(__name__)
         self.app.layout = html.Div([
@@ -151,14 +157,14 @@ class object2DVisualizer:
             dcc.Checklist(
                 id='topic-checkbox',
                 options=[{'label': i, 'value': i} for i in unique_topics],
-                value=list(set(obj.topic_name for obj in self.data_list)),
+                value=unique_topics,
                 inline=True
             ),
             html.Label('visualization class:'),
             dcc.Checklist(
                 id='class-checkbox',
                 options=[{'label': class_name_map[i], 'value': i} for i in unique_classes],
-                value=list(set(obj.classification for obj in self.data_list)),
+                value=unique_classes,
                 inline=True
             ),
         ], style={'height': '100vh'})
@@ -174,18 +180,24 @@ class object2DVisualizer:
         )
         def update_figure(selected_time_range, selected_topics, selected_classes):
             traces = []
-            for obj in self.data_list:
-                if selected_time_range[0] <= obj.timestamp <= selected_time_range[1] and obj.classification in selected_classes and obj.topic_name in selected_topics:
-                    x_series, y_series = generate_rectangle_xy_series(obj.x, obj.y, obj.yaw, obj.length, obj.width)
-                    traces.append(go.Scatter(
-                        x=x_series,
-                        y=y_series,
-                        mode="lines",
-                        line=dict(color=class_color_map[obj.classification], width=1),
-                        fill="none",
-                        hoverinfo="none",
-                        showlegend=False
-                    ))
+            # filter df by selected time range
+            time_range_condition = (self.df["time"] >= selected_time_range[0]) & (self.df["time"] <= selected_time_range[1])
+            class_condition = self.df["classification"].isin(selected_classes)
+            topic_condition = self.df["topic_name"].isin(selected_topics)
+            df_filtered = self.df[time_range_condition & class_condition & topic_condition]
+
+            # generate traces
+            for index, row in df_filtered.iterrows():
+                x_series, y_series = generate_rectangle_xy_series(row["x"], row["y"], row["yaw"], row["length"], row["width"])
+                traces.append(go.Scatter(
+                    x=x_series,
+                    y=y_series,
+                    mode="lines",
+                    line=dict(color=class_color_map[row["classification"]], width=1),
+                    fill="none",
+                    hoverinfo="none",
+                    showlegend=False
+                ))
                     
             return {'data': traces, 'layout': go.Layout(yaxis=dict(scaleanchor='x',), )}
 
@@ -195,12 +207,12 @@ class object2DVisualizer:
         Args:
             num (int): object number
         """
+        data_list = []
         for i in range(num): # 1000 obj ok, 10000 obj ng
             viz_data = DataForVisualize()
             viz_data.setRandomState()
-            viz_data.classification = i%7
-            viz_data.timestamp = i / 10.0
-            self.data_list.append(viz_data)
+            data_list.append(viz_data.data)
+        self.df = pd.DataFrame(data_list)
 
 
     def load_rosbag_data(self, rosbag_file_path: str):
@@ -216,17 +228,28 @@ class object2DVisualizer:
         
         # parser is written in tracking_parser
         parser = DetctionAndTrackingParser(rosbag_file_path, self.topic_names) # parser.data has dict of topic name and data
-        topic_num = 0
-        for topic_name in parser.data:
-            for topic in parser.data[topic_name]:
+
+        self.object_to_df(parser.data)
+        print("topic num: {}".format(len(self.df)))
+
+    def object_to_df(self, data):
+        """object to pandas data frame
+
+        Args:
+            data: dict with topic name keys
+        """
+        temp_list = []
+        for topic_name in data:
+            for topic in  data[topic_name]:
+                data_dict = {}
                 time = topic[0]*1e-9 # ns to sec
                 obj = topic[1]
                 viz_data = DataForVisualize()
                 viz_data.fromPerceptionObjectsWithTime(obj, time)
-                viz_data.topic_name = topic_name
-                self.data_list.append(viz_data)
-                topic_num += 1
-        print("topic num: {}".format(topic_num))
+                viz_data.setTopicName(topic_name)
+                temp_list.append(viz_data.data)
+        self.df = pd.DataFrame(temp_list)
+
 
     def run_server(self):
         # do not reload
@@ -260,4 +283,5 @@ if __name__ == '__main__':
     args = p.parse_args()
     rosbag_file_path = args.rosbag
     topics = args.topics
+    # rosbag_file_path = "dummy"
     main(rosbag_file_path, topics)
