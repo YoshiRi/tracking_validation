@@ -245,8 +245,7 @@ def main(rosbag_file_path: str = "", topics: list = []):
     if rosbag_file_path == "":
         rosbag_file_path = "dummy"
         rosbag_file_path = "/home/yoshiri/autoware/inittest/rosbag2_2023_05_09-09_24_48_0.db3"
-    if topics == []:
-        topics = ["/detection/lidar_detector/objects", "/detection/lidar_tracker/objects"]
+
     visualizer = object2DVisualizer(rosbag_file_path, topics)
     visualizer.run_server()
 

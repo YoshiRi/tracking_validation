@@ -138,10 +138,10 @@ def calc2DPolygonArea(footprints):
 # get transform from tf
 from rclpy.time import Time
 def get_transform_from_tf(tf_buffer, child_frame_id: str, parent_frame_id: str, stamp):
-    if type(stamp) == Time:
-        target_time = stamp
-    else:
+    if type(stamp) == float:
         target_time = Time(second = stamp)
+    else:
+        target_time = stamp
     try:
         transform = tf_buffer.lookup_transform(child_frame_id, parent_frame_id, target_time)
         return transform

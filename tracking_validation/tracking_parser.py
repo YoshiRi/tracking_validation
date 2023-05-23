@@ -3,6 +3,7 @@ import uuid
 from utils import *
 import matplotlib.pyplot as plt
 import numpy as np
+from tqdm import tqdm
 
 
 def getUUID(obj):
@@ -164,27 +165,46 @@ class DetectionParser:
     
 class DetctionAndTrackingParser:
     def __init__(self, bagfile:str, topic_names = []) -> None:
+        """parse detection and tracking msg in rosbag file
+
+        Args:
+            bagfile (str): ros2 bag file
+            topic_names (list, optional): Topic names to be parsed. Detection/Tracking/Prediction is supported. Defaults is [] and this is converted to "/perception/object_recognition/detection/objects", "/perception/object_recognition/tracking/objects".
+        """
         if topic_names == []:
             topic_names = ["/perception/object_recognition/detection/objects", "/perception/object_recognition/tracking/objects"]
 
         topics_dict, tf_buffer = get_topics_and_tf(bagfile, topic_names)
+        self.tf_buffer = tf_buffer
+        print("DetectionAndTrackingParser: finish parse rosbag file")
+
         self.data = {}
         for topic_name in topic_names:
             self.data[topic_name] = []
         self.max_time = 0
         self.min_time = 1e10
         # parse each data
-        for topic_name in topic_names:
+        print("DetectionAndTrackingParser: parsing data")
+        for topic_name in tqdm(topic_names):
             topics = topics_dict[topic_name]
             for stamp, msg in topics:
-                time = stamp
+                time = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9 # use message time
                 self.max_time = max(self.max_time, time)
                 self.min_time = min(self.min_time, time)
+
+                obj_frame = msg.header.frame_id
+                map_frame = "map"
                 for obj in msg.objects:
+                    # transform to map frame
+                    obj = self.transform_object(map_frame, obj_frame, obj, msg.header.stamp)
+                    if obj is None:
+                        continue
                     self.data[topic_name].append([time, obj])
-        self.tf_buffer = tf_buffer
+
 
     def calc_self_pose(self):
+        """get self vehicle pose from tf
+        """
         # get transform
         max_obj_num = 100
         obj_num = min(max_obj_num, (self.max_time - self.min_time)*2)  # assume topic is 2Hz
@@ -201,3 +221,55 @@ class DetctionAndTrackingParser:
                 continue # do nothing
         if self.self_poses == []:
             raise Exception("No tf found self vehicle pose")
+        
+    def transform_pose_to_frames(self, target_frame:str, pose_frame:str, pose_with_cov: PoseWithCovariance, stamp):
+        """transform pose from pose_frame to target_frame
+
+        Args:
+            target_frame (str): target frame for object, usually "map"
+            pose_frame (str): pose frame of current object, usually "base_link"
+            pose_with_cov (PoseWithCovariance): pose
+            stamp (_type_): time stamp of pose
+
+        Returns:
+            pose (PoseWithCovariance): pose in target_frame
+        """
+        from geometry_msgs.msg import PoseWithCovarianceStamped
+        from geometry_msgs.msg import TransformStamped
+
+        pose_cov_stamped = PoseWithCovarianceStamped()
+        pose_cov_stamped.pose = pose_with_cov
+        pose_cov_stamped.header.frame_id = pose_frame
+        pose_cov_stamped.header.stamp = stamp
+
+        # get pose from tf from pose_frame to target_frame
+        transform = get_transform_from_tf(self.tf_buffer, target_frame, pose_frame, stamp)
+        if transform is None:
+            #print("transform is None")
+            return None
+        
+        # transform to get pose in target_frame
+        # write your code here
+        import tf2_geometry_msgs
+        # pose_transformed = tf2_geometry_msgs.do_transform_pose(pose, transform)
+        transformed_pose_cov_stamped= tf2_geometry_msgs.do_transform_pose_with_covariance_stamped(pose_cov_stamped, transform)
+        return transformed_pose_cov_stamped.pose
+
+    def transform_object(self, target_frame:str, obj_frame: str, object, stamp):
+        """transform detection/tracking/prediction objects
+
+        Args:
+            target_frame (str): output object frame. usually "map"
+            obj_frame (str): input object frame. usually "base_link"
+            object (_type_): input object. detection/tracking/prediction object in autoware
+            stamp (_type_): timestamp in header
+        """
+        if obj_frame == target_frame:
+            return object
+        transformed_pose_with_cov = self.transform_pose_to_frames(target_frame, obj_frame, object.kinematics.pose_with_covariance, stamp)
+
+        if transformed_pose_with_cov is None:
+            return None
+        else:
+            object.kinematics.pose_with_covariance = transformed_pose_with_cov
+            return object
