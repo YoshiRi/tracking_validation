@@ -1,7 +1,7 @@
 # plotly visualizer
 import dash
 from dash import dcc, html
-from dash.dependencies import Input, Output
+from dash.dependencies import Input, Output, State
 import plotly.graph_objects as go
 import math
 import random
@@ -176,15 +176,24 @@ class object2DVisualizer:
         Output('graph', 'figure'),
         [Input('slider', 'value'),
         Input('topic-checkbox', 'value'), 
-        Input('class-checkbox', 'value')]
+        Input('class-checkbox', 'value'),
+        State('graph', 'figure')
+        ]
         )
-        def update_figure(selected_time_range, selected_topics, selected_classes):
+        def update_figure(selected_time_range, selected_topics, selected_classes, figure):
+
             traces = []
             # filter df by selected time range
             time_range_condition = (self.df["time"] >= selected_time_range[0]) & (self.df["time"] <= selected_time_range[1])
             class_condition = self.df["classification"].isin(selected_classes)
             topic_condition = self.df["topic_name"].isin(selected_topics)
             df_filtered = self.df[time_range_condition & class_condition & topic_condition]
+
+            # keep layout
+            if figure is None:
+                layout = go.Layout(yaxis=dict(scaleanchor='x',), )
+            else:
+                layout = figure["layout"]
 
             # generate traces
             for index, row in df_filtered.iterrows():
@@ -199,7 +208,7 @@ class object2DVisualizer:
                     showlegend=False
                 ))
                     
-            return {'data': traces, 'layout': go.Layout(yaxis=dict(scaleanchor='x',), )}
+            return {'data': traces, 'layout': layout}
 
     def create_random_dummy_data(self, num: int):
         """create dummy data for testing
