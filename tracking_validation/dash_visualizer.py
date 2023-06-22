@@ -154,6 +154,10 @@ class object2DVisualizer:
         timestamps = self.df["time"].to_list()
         min_time = min(timestamps)
         max_time = max(timestamps)
+        max_x = max(self.df["x"].to_list())
+        max_y = max(self.df["y"].to_list())
+        min_x = min(self.df["x"].to_list())
+        min_y = min(self.df["y"].to_list())
         unique_topics = self.df["topic_name"].unique()
         unique_classes = self.df["classification"].unique()
         object_type = ["bounding_box", "object_center"]
@@ -161,14 +165,16 @@ class object2DVisualizer:
 
         # search unique uuid
         unique_uuids = self.df["uuid"].unique()
-        self.plot_color_map = {}
-        self.plot_marker_map = {}
+        self.uuid_color_map = {}
+        self.topic_marker_map = {}
+        self.topic_color_map = {}
         for uuid in unique_uuids:
-            self.plot_color_map[uuid] = DEFAULT_PLOTLY_COLORS[random.randint(0, len(DEFAULT_PLOTLY_COLORS)-1)]
+            self.uuid_color_map[uuid] = DEFAULT_PLOTLY_COLORS[random.randint(0, len(DEFAULT_PLOTLY_COLORS)-1)]
         
         for iter, unique_topic in enumerate(unique_topics):
             symbol_num = len(DEFAULT_MARKER_SYMBOLS)
-            self.plot_marker_map[unique_topic] = DEFAULT_MARKER_SYMBOLS[iter % symbol_num]
+            self.topic_marker_map[unique_topic] = DEFAULT_MARKER_SYMBOLS[iter % symbol_num]
+            self.topic_color_map[unique_topic] = DEFAULT_PLOTLY_COLORS[iter % len(DEFAULT_PLOTLY_COLORS)]
 
         self.app = dash.Dash(__name__)
         self.app.layout = html.Div([
@@ -214,6 +220,13 @@ class object2DVisualizer:
                 value=[object_type[0]],
                 inline=True
             ),
+            html.Label('Plot color by:'),
+            dcc.RadioItems(
+                id='radio-items',
+                options = ['topic name', 'class label'],
+                value = 'class label',
+                inline=True
+            ),
         ], style={'height': '100vh'})
 
 
@@ -226,10 +239,11 @@ class object2DVisualizer:
         Input('topic-checkbox', 'value'), 
         Input('class-checkbox', 'value'),
         Input('object-mark-checkbox', 'value'),
+        Input('radio-items', 'value'),
         State('graph', 'figure')
         ]
         )
-        def update_figure(selected_time, selected_time_range, selected_topics, selected_classes, selected_object_type, figure):
+        def update_figure(selected_time, selected_time_range, selected_topics, selected_classes, selected_object_type, color_policy, figure):
             traces = []
             # filter df by selected time range
             time_range_condition = (self.df["time"] >= selected_time - selected_time_range) & (self.df["time"] <= selected_time + selected_time_range)
@@ -247,12 +261,21 @@ class object2DVisualizer:
             
             for index, row in df_filtered.iterrows():
                 if "bounding_box" in selected_object_type:
+                    if color_policy == "topic name":
+                        # color determined by topic name 
+                        color = self.topic_color_map[row["topic_name"]]
+                    elif color_policy == "class label":
+                        # color determined by class
+                        color = class_color_map[row["classification"]]
+                    else:
+                        raise NotImplementedError
+
                     x_series, y_series = generate_rectangle_xy_series(row["x"], row["y"], row["yaw"], row["length"], row["width"])
                     traces.append(go.Scatter(
                         x=x_series,
                         y=y_series,
                         mode="lines",
-                        line=dict(color=class_color_map[row["classification"]], width=1),
+                        line=dict(color=color, width=1),
                         fill="none",
                         hoverinfo="none",
                         showlegend=False
@@ -264,7 +287,7 @@ class object2DVisualizer:
                         y=[row["y"]],
                         mode="markers",
                         # line with marker with random color
-                        marker=dict(color=self.plot_color_map[row["uuid"]], size=5, symbol=self.plot_marker_map[row["topic_name"]]),
+                        marker=dict(color=self.uuid_color_map[row["uuid"]], size=5, symbol=self.topic_marker_map[row["topic_name"]]),
                         hoverinfo="none",
                         #label=" ".join(str(x) for x in row["uuid"]),
                         showlegend=False
