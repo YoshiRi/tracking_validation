@@ -154,11 +154,10 @@ class object2DVisualizer:
         timestamps = self.df["time"].to_list()
         min_time = min(timestamps)
         max_time = max(timestamps)
-        int_min_time = math.floor(min_time)
-        int_max_time = math.floor(max_time) + 1
         unique_topics = self.df["topic_name"].unique()
         unique_classes = self.df["classification"].unique()
         object_type = ["bounding_box", "object_center"]
+        timestamp_range = [0.05, 0.1, 0.5, 1, 2, 5, 10] # log scale for slider
 
         # search unique uuid
         unique_uuids = self.df["uuid"].unique()
@@ -174,14 +173,24 @@ class object2DVisualizer:
         self.app = dash.Dash(__name__)
         self.app.layout = html.Div([
             dcc.Graph(id='graph', style={'height': '80vh'}),
-            html.Label('Select timestamp[s] range:'),
-            dcc.RangeSlider(
+            html.Label('Select timestamp[s] to focus:'),
+            dcc.Slider(
                 id='slider',
                 min=min_time,
                 max=max_time,
-                value=[min_time, max_time],
+                value=min_time,
                 #marks={i: '{}'.format(i) for i in range(int_min_time, int_max_time+1)},
                 marks={i: '{}'.format(i) for i in timestamps},
+                step=None
+            ),
+            html.Label('Select timestamp[s] width range:'),
+            dcc.Slider(
+                id='range-slider',
+                min=min(timestamp_range),
+                max=max(timestamp_range),
+                value=0.1,
+                #marks={i: '{}'.format(i) for i in range(int_min_time, int_max_time+1)},
+                marks={i: '{}'.format(i) for i in timestamp_range},
                 step=None
             ),
             html.Label('visualization topic:'),
@@ -213,16 +222,17 @@ class object2DVisualizer:
         @self.app.callback(
         Output('graph', 'figure'),
         [Input('slider', 'value'),
+        Input('range-slider', 'value'),
         Input('topic-checkbox', 'value'), 
         Input('class-checkbox', 'value'),
         Input('object-mark-checkbox', 'value'),
         State('graph', 'figure')
         ]
         )
-        def update_figure(selected_time_range, selected_topics, selected_classes, selected_object_type, figure):
+        def update_figure(selected_time, selected_time_range, selected_topics, selected_classes, selected_object_type, figure):
             traces = []
             # filter df by selected time range
-            time_range_condition = (self.df["time"] >= selected_time_range[0]) & (self.df["time"] <= selected_time_range[1])
+            time_range_condition = (self.df["time"] >= selected_time - selected_time_range) & (self.df["time"] <= selected_time + selected_time_range)
             class_condition = self.df["classification"].isin(selected_classes)
             topic_condition = self.df["topic_name"].isin(selected_topics)
             df_filtered = self.df[time_range_condition & class_condition & topic_condition]
@@ -303,7 +313,7 @@ class object2DVisualizer:
         for topic_name in data:
             for topic in  data[topic_name]:
                 data_dict = {}
-                time = topic[0]*1e-9 # ns to sec
+                time = topic[0]
                 obj = topic[1]
                 viz_data = DataForVisualize()
                 viz_data.fromPerceptionObjectsWithTime(obj, time)
