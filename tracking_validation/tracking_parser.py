@@ -103,7 +103,7 @@ class TrackingParser:
     
     def plot_data(self, x_key = "time", y_keys = [],**kwargs):
         if len(y_keys) == 0:
-            y_keys = ["x", "y", "yaw", "vx", "covariance_x", "covariance_vx"]
+            y_keys = ["x", "y", "yaw", "vx", "covariance_x", "covariance_vx","length", "width"]
         
         legend = ["track_" + str(i) for i in range(len(self.filt_df["id"].unique()))]
 
@@ -120,13 +120,31 @@ class TrackingParser:
             axs[i].legend(legend)
         return fig, axs
     
+    def plot2d(self):
+        legend = ["track_" + str(i) for i in range(len(self.filt_df["id"].unique()))]
+        plt.figure(figsize=(12,12))
+        ax = plt.gca()
+        self.plot_kinematics(self.filt_df, "x", "y", plt_style="x-", ax=ax)
+        plt.title("2D Position")
+        plt.xlabel("x [m]")
+        plt.ylabel("y [m]")
+        plt.grid()
+        plt.legend(legend)
+
+    
     def filter_df_between(self, dict_key, bound1, bound2):
         upper_bound = max(bound1, bound2)
         lower_bound = min(bound1, bound2)
-        self.filt_df = self.df[(self.df[dict_key] < upper_bound) & (self.df[dict_key] > lower_bound)]
+        self.filt_df = self.filt_df[(self.filt_df[dict_key] < upper_bound) & (self.filt_df[dict_key] > lower_bound)]
     
     def filter_df_equal(self, dict_key, value):
-        self.filt_df = self.df[self.df[dict_key] == value]
+        self.filt_df = self.filt_df[self.filt_df[dict_key] == value]
+
+    def filter_df_by_label(self, labels):
+        self.filt_df = self.filt_df[self.filt_df["class_label"].isin(labels)]
+    
+    def filter_reset(self):
+        self.filt_df = self.df.copy()
 
 
 

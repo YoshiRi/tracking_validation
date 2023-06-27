@@ -2,6 +2,8 @@ import sys
 import numpy as np
 import argparse
 import matplotlib.pyplot as plt
+from autoware_auto_perception_msgs.msg import ObjectClassification
+
 sys.path.append('../tracking_validation')
 
 # original functions
@@ -11,20 +13,38 @@ from tracking_parser import TrackingParser
 # this only works in yoshi ri environment
 DEFAULT_ROSBAG = "/home/yoshiri/autoware_bag/SPkadai/117/scenario_0_0.db3"
 DEFAULT_TOPIC = "/perception/object_recognition/tracking/objects"
+DEFAULT_LABEL = "vehicle"
 
-def main(bag_file, show = False, tracking_topic = DEFAULT_TOPIC, xlim = [], ylim = []):
+str_labels_map = {
+    "vehicle": [ObjectClassification.BUS, ObjectClassification.CAR, ObjectClassification.TRUCK, ObjectClassification.TRAILER],
+    "pedestrian": [ObjectClassification.PEDESTRIAN],
+    "bike": [ObjectClassification.MOTORCYCLE, ObjectClassification.BICYCLE],
+    "all": []
+}
+
+
+def main(bag_file, show = False, tracking_topic = DEFAULT_TOPIC, xlim = [], ylim = [], vlim = [],  yawlim = [], label = DEFAULT_LABEL):
     tp = TrackingParser(bag_file, tracking_topic)
     if xlim:
         tp.filter_df_between("x", xlim[0], xlim[1])
     if ylim:
         tp.filter_df_between("y", ylim[0], ylim[1])
+    if vlim:
+        tp.filter_df_between("vx", vlim[0], vlim[1])
+    if yawlim:
+        tp.filter_df_between("yaw", yawlim[0], yawlim[1])
+    if label:
+        labels = str_labels_map[label]
+        tp.filter_df_by_label(labels)
+    
     data = tp.plot_data()
+
+    tp.plot2d()
     if show:
         plt.show()
     return data
 
-
-if __name__=="__main__":
+def parse_argument():
     parser = argparse.ArgumentParser(description="Example argparse script")
 
     # bag_file argument
@@ -69,6 +89,37 @@ if __name__=="__main__":
         help="y axis limit [ymin, ymax]"
     )
 
-    args = parser.parse_args()
+    # vlim argument
+    parser.add_argument(
+        "--vlim",
+        nargs="+",
+        type=float,
+        default=[],
+        help="velocity limit [vmin, vmax]"
+    )
 
-    main(args.bag_file, args.show_figure, args.tracking_topic, args.xlim, args.ylim)
+    # yawlim argument
+    parser.add_argument(
+        "--yawlim",
+        nargs="+",
+        type=float,
+        default=[],
+        help="yaw limit [yawmin, yawmax]"
+    )
+
+    # label
+    parser.add_argument(
+        "--label",
+        type=str,
+        default=DEFAULT_LABEL,
+        help="Label of the object. Choose from vehicle, pedestrian, bike, all",
+    )
+
+    args = parser.parse_args()
+    return args
+
+
+# show main function
+if __name__=="__main__":
+    args = parse_argument()
+    main(args.bag_file, args.show_figure, args.tracking_topic, args.xlim, args.ylim, args.vlim, args.yawlim, args.label)
