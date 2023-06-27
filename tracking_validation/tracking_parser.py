@@ -73,9 +73,10 @@ class TrackingParser:
     """parse tracking object from bagfile
     """
     def __init__(self, bagfile: str, tracking_topic = "/perception/object_recognition/tracking/objects") -> None:
-        self.data = getTrackingData(bagfile, tracking_topic)
-        self.track_ids = list(self.data.keys())
-        self.df = self.dict_to_dataframe(self.data)
+        data = getTrackingData(bagfile, tracking_topic)
+        self.track_ids = list(data.keys())
+        self.df = self.dict_to_dataframe(data)
+        self.filt_df = self.df.copy()
 
     def dict_to_dataframe(self, data):
         out_df = pd.DataFrame()
@@ -104,7 +105,7 @@ class TrackingParser:
         if len(y_keys) == 0:
             y_keys = ["x", "y", "yaw", "vx", "covariance_x", "covariance_vx"]
         
-        legend = ["track_" + str(i) for i in range(len(self.track_ids))]
+        legend = ["track_" + str(i) for i in range(len(self.filt_df["id"].unique()))]
 
         cols = int(kwargs.pop("cols", 2))
         rows = len(y_keys)//cols + len(y_keys)%cols
@@ -112,12 +113,20 @@ class TrackingParser:
         fig, axs = plt.subplots(rows, cols, sharex=True, figsize=figsize)
         axs = axs.reshape(-1)
         for i, y_key in enumerate(y_keys):
-            self.plot_kinematics(self.df, x_key, y_key, ax=axs[i], **kwargs)   
+            self.plot_kinematics(self.filt_df, x_key, y_key, ax=axs[i], **kwargs)   
             axs[i].set_title(y_key)
             axs[i].set_xlabel("time [s]")
             axs[i].grid()
             axs[i].legend(legend)
-        return fig, axs    
+        return fig, axs
+    
+    def filter_df_between(self, dict_key, bound1, bound2):
+        upper_bound = max(bound1, bound2)
+        lower_bound = min(bound1, bound2)
+        self.filt_df = self.df[(self.df[dict_key] < upper_bound) & (self.df[dict_key] > lower_bound)]
+    
+    def filter_df_equal(self, dict_key, value):
+        self.filt_df = self.df[self.df[dict_key] == value]
 
 
 
