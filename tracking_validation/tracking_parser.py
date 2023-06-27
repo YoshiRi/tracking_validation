@@ -4,6 +4,7 @@ from utils import *
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
+import pandas as pd
 
 
 def getUUID(obj):
@@ -73,17 +74,30 @@ class TrackingParser:
     """
     def __init__(self, bagfile: str, tracking_topic = "/perception/object_recognition/tracking/objects") -> None:
         self.data = getTrackingData(bagfile, tracking_topic)
-        self.track_ids = list(self.data.keys())        
+        self.track_ids = list(self.data.keys())
+        self.df = self.dict_to_dataframe(self.data)
 
-    def plot_kinematics(self, x_key, y_key, ax = None, **kwargs):
+    def dict_to_dataframe(self, data):
+        out_df = pd.DataFrame()
+        for obj_id in data.keys():
+            dict_data = getTrackerKinematicsDict(data[obj_id])
+            df = pd.DataFrame(dict_data)
+            # fill id columns with obj_id
+            df["id"] = obj_id
+            # vertically concatenate dataframes
+            out_df = pd.concat([out_df, df], axis=0)
+        return out_df
+
+            
+    def plot_kinematics(self, df, x_key, y_key, ax = None, **kwargs):
         if ax is None:
             fig, ax = plt.subplots()
         # extract plt_style from kwargs
         plt_style = kwargs.pop("plt_style", "x-")
 
-        for id in self.track_ids:
-            dict_data = getTrackerKinematicsDict(self.data[id])
-            ax.plot(dict_data[x_key], dict_data[y_key], plt_style)
+        for id in df["id"].unique():
+            data = df[df["id"] == id]
+            ax.plot(data[x_key], data[y_key], plt_style)
         return ax
     
     def plot_data(self, x_key = "time", y_keys = [],**kwargs):
@@ -98,7 +112,7 @@ class TrackingParser:
         fig, axs = plt.subplots(rows, cols, sharex=True, figsize=figsize)
         axs = axs.reshape(-1)
         for i, y_key in enumerate(y_keys):
-            self.plot_kinematics(x_key, y_key, ax=axs[i], **kwargs)   
+            self.plot_kinematics(self.df, x_key, y_key, ax=axs[i], **kwargs)   
             axs[i].set_title(y_key)
             axs[i].set_xlabel("time [s]")
             axs[i].grid()
