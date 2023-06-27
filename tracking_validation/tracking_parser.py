@@ -22,8 +22,8 @@ def getTrackersInID(tracker_topic_dict):
     return trackers
 
 def getTrackingData(bagfile, topic_name = "/perception/object_recognition/tracking/objects"):
-    topic_dict, tf_buffer = get_topics_and_tf(bagfile, [topic_name])[topic_name]
-    trackers = getTrackersInID(topic_dict)
+    topic_dict, tf_buffer = get_topics_and_tf(bagfile, [topic_name])
+    trackers = getTrackersInID(topic_dict[topic_name])
     return trackers
 
 
@@ -44,11 +44,11 @@ def getTrackerKinematicsDict(trackers: list):
     data = {}
     keys = ["time", "x", "y", "yaw", "vx", "length", "width",
              "covariance_x", "covariance_y", "covariance_xy_matrix",
-             "covariance_vx", "covariance_yaw"]
+             "covariance_vx", "covariance_yaw", "class_label"]
     for key in keys:
         data[key] = []
 
-    for time, topic in trackers:
+    for time, topic in trackers: # topic: TrackedObject
         xy = get2DPosition(topic)
         data["time"].append(time)
         data["x"].append(xy[0])
@@ -63,6 +63,7 @@ def getTrackerKinematicsDict(trackers: list):
         data["covariance_yaw"].append(cov2d[2])
         data["covariance_xy_matrix"].append(get2DPositionCovariance(topic))
         data["covariance_vx"].append(getVelocityCovariance(topic)[0])
+        data["class_label"].append(getLabel(topic))
     return data
 
 
