@@ -37,7 +37,7 @@ def main(bag_file, show = False, tracking_topic = DEFAULT_TOPIC, xlim = [], ylim
         labels = str_labels_map[label]
         tp.filter_df_by_label(labels)
     
-    data = tp.plot_data()
+    data = tp.plot_state_and_cov()
 
     tp.plot2d()
     if show:

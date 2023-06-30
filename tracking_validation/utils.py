@@ -95,17 +95,23 @@ def getYaw(object: PerceptionObject) -> float:
     """
     return getOrientation(object)[2]
 
-def getVX(object: PerceptionObject) -> float:
-    """get velocity x from ros message
+def getTwist(object: PerceptionObject) -> np.ndarray:
+    """get twist from ros message
     """
     dtype = type(object)
     if dtype == TrackedObject or dtype == DetectedObject:
-        return object.kinematics.twist_with_covariance.twist.linear.x
+        twist = object.kinematics.twist_with_covariance.twist
     elif dtype == PredictedObject:
-        return object.kinematics.initial_twist_with_covariance.twist.linear.x
+        twist = object.kinematics.initial_twist_with_covariance.twist
     else:
         print("Invalid object type")
         exit(1)
+    return np.array([twist.linear.x, twist.linear.y, twist.linear.z, twist.angular.x, twist.angular.y, twist.angular.z])
+
+def getVX(object: PerceptionObject) -> float:
+    """get velocity x from ros message
+    """
+    return getTwist(object)[0]
 
 def getTimeFromStamp(stamp):
     """get time from ros message

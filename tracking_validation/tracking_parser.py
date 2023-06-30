@@ -28,24 +28,13 @@ def getTrackingData(bagfile, topic_name = "/perception/object_recognition/tracki
     return trackers
 
 
-def getTrackerKinematicsList(trackers: list):
-    data = []
-    for time, topic in trackers:
-        xy = get2DPosition(topic)
-        yaw = getYaw(topic)
-        vx = getVX(topic)
-        length = topic.shape.dimensions.x
-        width = topic.shape.dimensions.y
-        data.append([time, xy[0], xy[1], yaw, vx,length, width])
-    
-    data = np.array(data).reshape(-1,7)
-    return data
-
 def getTrackerKinematicsDict(trackers: list):
     data = {}
-    keys = ["time", "x", "y", "yaw", "vx", "length", "width",
-             "covariance_x", "covariance_y", "covariance_xy_matrix",
-             "covariance_vx", "covariance_yaw", "class_label"]
+    keys = ["time", "x", "y", "yaw", "vx", "vyaw",
+            "length", "width", "estimated sin(slip_angle)",
+             "covariance_x", "covariance_y", "covariance_xy_matrix", "covariance_yaw", 
+             "covariance_vx", "covariance_vyaw", 
+             "class_label"]
     for key in keys:
         data[key] = []
 
@@ -55,7 +44,9 @@ def getTrackerKinematicsDict(trackers: list):
         data["x"].append(xy[0])
         data["y"].append(xy[1])
         data["yaw"].append(getYaw(topic))
-        data["vx"].append(getVX(topic))
+        twist = getTwist(topic)
+        data["vx"].append(twist[0])
+        data["vyaw"].append(twist[5])
         data["length"].append(topic.shape.dimensions.x)
         data["width"].append(topic.shape.dimensions.y)
         cov2d = get2DPositionCovariance(topic)
@@ -63,8 +54,12 @@ def getTrackerKinematicsDict(trackers: list):
         data["covariance_y"].append(cov2d[1])
         data["covariance_yaw"].append(cov2d[2])
         data["covariance_xy_matrix"].append(get2DPositionCovariance(topic))
-        data["covariance_vx"].append(getVelocityCovariance(topic)[0])
+        cov_twist = getVelocityCovariance(topic)
+        data["covariance_vx"].append(cov_twist[0])
+        data["covariance_vyaw"].append(cov_twist[5])
         data["class_label"].append(getLabel(topic))
+        sin_slip_angle = topic.shape.dimensions.x * twist[5] / (twist[0] + 1e-6) 
+        data["estimated sin(slip_angle)"].append(sin_slip_angle)
     return data
 
 
@@ -120,6 +115,13 @@ class TrackingParser:
             axs[i].legend(legend)
         return fig, axs
     
+    def plot_state_and_cov(self):
+        x_key = "time"
+        y_keys = ["x", "y", "yaw", "vx", "vyaw", "estimated sin(slip_angle)", "length", "width"]
+        y_cov_keys = ["covariance_x", "covariance_y", "covariance_yaw", "covariance_vx", "covariance_vyaw"]
+        self.plot_data(x_key, y_keys)
+        self.plot_data(x_key, y_cov_keys)
+
     def plot2d(self):
         legend = ["track_" + str(i) for i in range(len(self.filt_df["id"].unique()))]
         plt.figure(figsize=(12,12))
