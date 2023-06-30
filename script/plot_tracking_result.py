@@ -65,7 +65,7 @@ def parse_argument():
 
     # tracking topic name 
     parser.add_argument(
-        "--tracking_topic",
+        "--topic",
         type=str,
         default=DEFAULT_TOPIC,
         help="Name of the tracking topic",
@@ -122,4 +122,4 @@ def parse_argument():
 # show main function
 if __name__=="__main__":
     args = parse_argument()
-    main(args.bag_file, args.show_figure, args.tracking_topic, args.xlim, args.ylim, args.vlim, args.yawlim, args.label)
+    main(args.bag_file, args.show_figure, args.topic, args.xlim, args.ylim, args.vlim, args.yawlim, args.label)
