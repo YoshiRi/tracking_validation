@@ -100,7 +100,13 @@ class TrackingParser:
         if len(y_keys) == 0:
             y_keys = ["x", "y", "yaw", "vx", "covariance_x", "covariance_vx","length", "width"]
         
-        legend = ["track_" + str(i) for i in range(len(self.filt_df["id"].unique()))]
+        # extract legend form
+        # set original legend if uuid_legend is false
+        uuid_legend = kwargs.pop("uuid_legend", False)
+        if uuid_legend:
+            legend = self.filt_df["id"].unique()
+        else:
+            legend = ["track_" + str(i) for i in range(len(self.filt_df["id"].unique()))]
 
         cols = int(kwargs.pop("cols", 2))
         rows = len(y_keys)//cols + len(y_keys)%cols
@@ -115,15 +121,20 @@ class TrackingParser:
             axs[i].legend(legend)
         return fig, axs
     
-    def plot_state_and_cov(self):
+    def plot_state_and_cov(self, **kwargs):
         x_key = "time"
         y_keys = ["x", "y", "yaw", "vx", "vyaw", "estimated sin(slip_angle)", "length", "width"]
         y_cov_keys = ["covariance_x", "covariance_y", "covariance_yaw", "covariance_vx", "covariance_vyaw"]
-        self.plot_data(x_key, y_keys)
-        self.plot_data(x_key, y_cov_keys)
+        self.plot_data(x_key, y_keys, **kwargs)
+        self.plot_data(x_key, y_cov_keys, **kwargs)
 
-    def plot2d(self):
-        legend = ["track_" + str(i) for i in range(len(self.filt_df["id"].unique()))]
+    def plot2d(self, **kwargs):
+
+        uuid_legend = kwargs.pop("uuid_legend", False)
+        if uuid_legend:
+            legend = self.filt_df["id"].unique()
+        else:
+            legend = ["track_" + str(i) for i in range(len(self.filt_df["id"].unique()))]
         plt.figure(figsize=(12,12))
         ax = plt.gca()
         self.plot_kinematics(self.filt_df, "x", "y", plt_style="x-", ax=ax)

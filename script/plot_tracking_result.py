@@ -23,7 +23,7 @@ str_labels_map = {
 }
 
 
-def main(bag_file, show = False, tracking_topic = DEFAULT_TOPIC, xlim = [], ylim = [], vlim = [],  yawlim = [], label = DEFAULT_LABEL):
+def main(bag_file, show = False, tracking_topic = DEFAULT_TOPIC, xlim = [], ylim = [], vlim = [],  yawlim = [], label = DEFAULT_LABEL, uuid_legend = False):
     tp = TrackingParser(bag_file, tracking_topic)
     if xlim:
         tp.filter_df_between("x", xlim[0], xlim[1])
@@ -37,9 +37,9 @@ def main(bag_file, show = False, tracking_topic = DEFAULT_TOPIC, xlim = [], ylim
         labels = str_labels_map[label]
         tp.filter_df_by_label(labels)
     
-    data = tp.plot_state_and_cov()
+    data = tp.plot_state_and_cov(uuid_legend=uuid_legend)
 
-    tp.plot2d()
+    tp.plot2d(uuid_legend=uuid_legend)
     if show:
         plt.show()
     return data
@@ -115,6 +115,14 @@ def parse_argument():
         help="Label of the object. Choose from vehicle, pedestrian, bike, all",
     )
 
+    # tracking legend
+    parser.add_argument(
+        "--uuid_legend",
+        type=bool,
+        default=False,
+        help="Whether to show the legend of tracking as uuid name or not. default is False"
+    )
+
     args = parser.parse_args()
     return args
 
@@ -122,4 +130,4 @@ def parse_argument():
 # show main function
 if __name__=="__main__":
     args = parse_argument()
-    main(args.bag_file, args.show_figure, args.topic, args.xlim, args.ylim, args.vlim, args.yawlim, args.label)
+    main(args.bag_file, args.show_figure, args.topic, args.xlim, args.ylim, args.vlim, args.yawlim, args.label, args.uuid_legend)
