@@ -3,13 +3,14 @@ import numpy as np
 from scipy.spatial.distance import mahalanobis
 from utils import *
 from iou_utils import get_2d_iou
+from typing import List, Tuple, Union, Optional
 
 from autoware_auto_perception_msgs.msg import DetectedObject
 from autoware_auto_perception_msgs.msg import DetectedObjectKinematics
 from autoware_auto_perception_msgs.msg import ObjectClassification
 from autoware_auto_perception_msgs.msg import Shape
 
-def association_gate(tracker, detection, max_dist, min_area, max_area, max_angle):
+def association_gate(tracker: TrackedObject, detection: DetectedObject, max_dist, min_area, max_area, max_angle):
     """
     Checks if the tracker and the detected object pass the association gates.
 
@@ -25,14 +26,14 @@ def association_gate(tracker, detection, max_dist, min_area, max_area, max_angle
         dict: True/False for each gate
     """
 
-    tracker_pos = get2DPosition(tracker)
-    tracker_covariance = getPositionCovariance(tracker)
-    detection_pos = get2DPosition(detection)
-    detection_area = calc2DBboxArea(detection)
+    tracker_pos = get2DPosition(tracker)  # [x, y]
+    tracker_covariance = get2DPositionCovariance(tracker) # cov [x, y, yaw]
+    detection_pos = get2DPosition(detection) # [x, y]
+    detection_area = calc2DBboxArea(detection) # area
     tracker_orientation = getYaw(tracker) 
     detection_orientation = getYaw(detection)
-    tracker_bbox = (tracker.x_min, tracker.y_min, tracker.x_max, tracker.y_max)
-    detection_bbox = (detection.x_min, detection.y_min, detection.x_max, detection.y_max)
+    # tracker_bbox = (tracker.x_min, tracker.y_min, tracker.x_max, tracker.y_max)
+    # detection_bbox = (detection.x_min, detection.y_min, detection.x_max, detection.y_max)
     min_iou = 0.01
 
     return {
@@ -40,11 +41,11 @@ def association_gate(tracker, detection, max_dist, min_area, max_area, max_angle
             "area_gate": area_gate(detection_area, min_area, max_area),
             "angle_gate": angle_gate(tracker_orientation, detection_orientation, max_angle),
             "mahalanobis_distance_gate": mahalanobis_distance_gate(tracker_pos, detection_pos, tracker_covariance, 3),
-            "iou_gate": iou_gate(tracker_bbox, detection_bbox, min_iou)
+            "iou_gate": iou_gate(tracker, detection, min_iou)
             }
 
 
-def distance_gate(tracker_pos, detection_pos, max_dist):
+def distance_gate(tracker_pos: List[float], detection_pos, max_dist):
     """
     Checks if the distance between the tracker and the detected object is within a maximum distance threshold.
 
@@ -106,7 +107,7 @@ def mahalanobis_distance_gate(tracker_pos, detection_pos, tracker_covariance, th
     mahalanobis_dist = mahalanobis(tracker_pos, detection_pos, np.linalg.inv(tracker_covariance))
     return mahalanobis_dist <= threshold
 
-def iou_gate(tracker, detection, min_iou=0.01):
+def iou_gate(tracker: TrackedObject, detection:DetectedObject, min_iou=0.01):
     """
     Checks if the intersection over union (IoU) between the tracker and the detected object is above a minimum threshold.
 
