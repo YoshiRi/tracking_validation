@@ -131,6 +131,15 @@ def getLabel(obj: PerceptionObject) -> ObjectClassification:
             label = cl.label
     return label
 
+def getBBOX(object: PerceptionObject) -> np.ndarray:
+    """get bbox from ros message
+    """
+    length, width  = object.shape.dimensions.x, object.shape.dimensions.y
+    x, y, z = getPosition(object)
+    yaw = getYaw(object)
+    
+    return np.array([object.shape.dimensions.x, object.shape.dimensions.y, object.shape.dimensions.z])
+
 def calc2DBboxArea(object):
     """calculate area from detected or tracked object
     """

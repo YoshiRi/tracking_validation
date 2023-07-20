@@ -149,6 +149,12 @@ class TrackingParser:
         upper_bound = max(bound1, bound2)
         lower_bound = min(bound1, bound2)
         self.filt_df = self.filt_df[(self.filt_df[dict_key] < upper_bound) & (self.filt_df[dict_key] > lower_bound)]
+
+    def crop_df_by_time(self, start_time, end_time):
+        upper_bound = max(start_time, end_time)
+        lower_bound = min(start_time, end_time)
+        start = self.filt_df["time"].min()
+        self.filt_df = self.filt_df[(self.filt_df["time"] < start + upper_bound) & (self.filt_df["time"] > start + lower_bound)]
     
     def filter_df_equal(self, dict_key, value):
         self.filt_df = self.filt_df[self.filt_df[dict_key] == value]

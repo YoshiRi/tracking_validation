@@ -17,14 +17,17 @@ DEFAULT_LABEL = "vehicle"
 
 str_labels_map = {
     "vehicle": [ObjectClassification.BUS, ObjectClassification.CAR, ObjectClassification.TRUCK, ObjectClassification.TRAILER],
+    "large_vehicle": [ObjectClassification.BUS, ObjectClassification.TRUCK, ObjectClassification.TRAILER],
     "pedestrian": [ObjectClassification.PEDESTRIAN],
     "bike": [ObjectClassification.MOTORCYCLE, ObjectClassification.BICYCLE],
     "all": []
 }
 
 
-def main(bag_file, show = False, tracking_topic = DEFAULT_TOPIC, xlim = [], ylim = [], vlim = [],  yawlim = [], label = DEFAULT_LABEL, uuid_legend = False):
+def main(bag_file, show = False, tracking_topic = DEFAULT_TOPIC, tlim = [], xlim = [], ylim = [], vlim = [],  yawlim = [], label = DEFAULT_LABEL, uuid_legend = False):
     tp = TrackingParser(bag_file, tracking_topic)
+    if tlim:
+        tp.crop_df_by_time("t", tlim[0], tlim[1])
     if xlim:
         tp.filter_df_between("x", xlim[0], xlim[1])
     if ylim:
@@ -70,6 +73,15 @@ def parse_argument():
         default=DEFAULT_TOPIC,
         help="Name of the tracking topic",
     )
+    
+    # tlim argument
+    parser.add_argument(
+        "--tlim",
+        nargs="+",
+        type=float,
+        default=[],
+        help="relative time limit start with 0 sec. [tmin, tmax]"
+    )
 
     # xlim argument
     parser.add_argument(
@@ -97,8 +109,8 @@ def parse_argument():
         default=[],
         help="velocity limit [vmin, vmax]"
     )
-
     # yawlim argument
+
     parser.add_argument(
         "--yawlim",
         nargs="+",
@@ -130,4 +142,4 @@ def parse_argument():
 # show main function
 if __name__=="__main__":
     args = parse_argument()
-    main(args.bag_file, args.show_figure, args.topic, args.xlim, args.ylim, args.vlim, args.yawlim, args.label, args.uuid_legend)
+    main(args.bag_file, args.show_figure, args.topic, args.tlim, args.xlim, args.ylim, args.vlim, args.yawlim, args.label, args.uuid_legend)
