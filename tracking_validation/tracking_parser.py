@@ -34,7 +34,7 @@ def getTrackerKinematicsDict(trackers: list):
             "length", "width", "estimated sin(slip_angle)",
              "covariance_x", "covariance_y", "covariance_xy_matrix", "covariance_yaw", 
              "covariance_vx", "covariance_vyaw", 
-             "class_label"]
+             "class_label", "existence_probability"]
     for key in keys:
         data[key] = []
 
@@ -60,6 +60,7 @@ def getTrackerKinematicsDict(trackers: list):
         data["class_label"].append(getLabel(topic))
         sin_slip_angle = topic.shape.dimensions.x * twist[5] / (twist[0] + 1e-6) 
         data["estimated sin(slip_angle)"].append(sin_slip_angle)
+        data["existence_probability"].append(topic.existence_probability)
     return data
 
 
@@ -124,7 +125,7 @@ class TrackingParser:
     def plot_state_and_cov(self, **kwargs):
         x_key = "time"
         y_keys = ["x", "y", "yaw", "vx", "vyaw", "estimated sin(slip_angle)", "length", "width"]
-        y_cov_keys = ["covariance_x", "covariance_y", "covariance_yaw", "covariance_vx", "covariance_vyaw"]
+        y_cov_keys = ["covariance_x", "covariance_y", "covariance_yaw", "covariance_vx", "covariance_vyaw", "existence_probability"]
         self.plot_data(x_key, y_keys, **kwargs)
         self.plot_data(x_key, y_cov_keys, **kwargs)
 
