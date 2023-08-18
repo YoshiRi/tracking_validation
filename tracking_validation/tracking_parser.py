@@ -1,13 +1,17 @@
-from rosbag_parser import get_topics_as_dict, get_topics_and_tf
+from rosbag_parser import get_topics_dict, get_topics_and_tf
 import uuid
 from utils import *
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 import pandas as pd
+from autoware_auto_perception_msgs.msg import TrackedObject, TrackedObjects, TrackedObjectKinematics
+from autoware_auto_perception_msgs.msg import PredictedObject, PredictedObjects, PredictedObjectKinematics
+from typing import List, Dict, Tuple, Union, Optional
+from visualization_msgs.msg import MarkerArray, Marker
+import itertools
 
-
-def getUUID(obj):
+def getUUID(obj: Union[TrackedObject, PredictedObject]):
     return str(uuid.UUID(bytes=obj.object_id.uuid.tobytes()))
 
 def getTrackersInID(tracker_topic_dict):
@@ -38,7 +42,7 @@ def getTrackerKinematicsDict(trackers: list):
     for key in keys:
         data[key] = []
 
-    for time, topic in trackers: # topic: TrackedObject
+    for time, topic in trackers: # topic: TrackedObject or PredictedObject
         xy = get2DPosition(topic)
         data["time"].append(time)
         data["x"].append(xy[0])
@@ -168,8 +172,202 @@ class TrackingParser:
 
 
 
+class PredictionParser:
+    """parse prediction object from bagfile
+    """
+    def __init__(self, bagfile: str, prediction_topic = "/perception/object_recognition/objects", maneuver_topic = "/perception/object_recognition/prediction/maneuver") -> None:
+        data = getTrackingData(bagfile, prediction_topic)
+        self.track_ids = list(data.keys())
+        kinematics_df = self.dict_to_dataframe(data)
+        maneuver_df = self.get_maneuver(bagfile, maneuver_topic)
+        self.df = pd.merge(kinematics_df, maneuver_df, on=["x","y"])
+        self.filt_df = self.df.copy()
+
+    def get_maneuver(self, bagfile:str, maneuver_topic: str) -> pd.DataFrame:
+        """get maneuver from rosbag"""
+        topic_dicts = get_topics_dict(bagfile, [maneuver_topic])
+        maneuver_data = []
+        for maneuver_set in topic_dicts[maneuver_topic]:
+            maneuvers = maneuver_set[1]
+            for maneuver in maneuvers.markers:
+                maneuver_as_list = self.parse_maneuver(maneuver)
+                maneuver_data.append(maneuver_as_list)
+        return pd.DataFrame(maneuver_data)
+    
+    def parse_maneuver(self, maneuver: Marker) -> Dict:
+        """parse prediction maneuver
+
+        Args:
+            unix_time (int): _description_
+            maneuver (Marker): _description_
+
+        Returns:
+            Dict: _description_
+        """
+        color_obj = maneuver.color
+        maneuver_color = (color_obj.r, color_obj.g, color_obj.b)
+        pose = maneuver.pose
+
+        # LeftLaneChange: Green, RightLaneChange: Red, LaneKeeping: Blue
+        color_to_state = { (0., 1., 0.): "LeftLaneChange", (1., 0., 0.): "RightLaneChange", (0., 0., 1.): "LaneFollow" }
+        maneuver_state = color_to_state[maneuver_color]
+        return {
+            "x": pose.position.x,
+            "y": pose.position.y,
+            "maneuver_state": maneuver_state,
+            "maneuver_color": maneuver_color
+        }
+
+    def dict_to_dataframe(self, data):
+        out_df = pd.DataFrame()
+        for obj_id in data.keys():
+            dict_data = getTrackerKinematicsDict(data[obj_id])
+            df = pd.DataFrame(dict_data)
+            # fill id columns with obj_id
+            df["id"] = obj_id
+            # vertically concatenate dataframes
+            out_df = pd.concat([out_df, df], axis=0)
+        return out_df
+
+            
+    def plot_kinematics(self, df, x_key, y_key, ax = None, **kwargs):
+        if ax is None:
+            fig, ax = plt.subplots()
+        # extract plt_style from kwargs
+        plt_style = kwargs.pop("plt_style", "x-")
+
+        for id in df["id"].unique():
+            data = df[df["id"] == id]
+            ax.plot(data[x_key], data[y_key], plt_style)
+        return ax
+    
+    def plot_data(self, x_key = "time", y_keys = [],**kwargs):
+        if len(y_keys) == 0:
+            y_keys = ["x", "y", "yaw", "vx", "covariance_x", "covariance_vx","length", "width"]
+        
+        # extract legend form
+        # set original legend if uuid_legend is false
+        uuid_legend = kwargs.pop("uuid_legend", False)
+        if uuid_legend:
+            legend = self.filt_df["id"].unique()
+        else:
+            legend = ["track_" + str(i) for i in range(len(self.filt_df["id"].unique()))]
+
+        cols = int(kwargs.pop("cols", 2))
+        rows = len(y_keys)//cols + len(y_keys)%cols
+        figsize = (8*cols, 5 * rows)
+        fig, axs = plt.subplots(rows, cols, sharex=True, figsize=figsize)
+        axs = axs.reshape(-1)
+        for i, y_key in enumerate(y_keys):
+            self.plot_kinematics(self.filt_df, x_key, y_key, ax=axs[i], **kwargs)   
+            axs[i].set_title(y_key)
+            axs[i].set_xlabel("time [s]")
+            axs[i].grid()
+            axs[i].legend(legend)
+        return fig, axs
+    
+    def plot_state_and_cov(self, **kwargs):
+        x_key = "time"
+        y_keys = ["x", "y", "yaw", "vx", "vyaw", "estimated sin(slip_angle)", "length", "width"]
+        y_cov_keys = ["covariance_x", "covariance_y", "covariance_yaw", "covariance_vx", "covariance_vyaw", "existence_probability"]
+        self.plot_data(x_key, y_keys, **kwargs)
+        self.plot_data(x_key, y_cov_keys, **kwargs)
+
+    def plot2d(self, **kwargs):
+
+        uuid_legend = kwargs.pop("uuid_legend", False)
+        if uuid_legend:
+            legend = self.filt_df["id"].unique()
+        else:
+            legend = ["track_" + str(i) for i in range(len(self.filt_df["id"].unique()))]
+        plt.figure(figsize=(12,12))
+        ax = plt.gca()
+        self.plot_kinematics(self.filt_df, "x", "y", plt_style="x-", ax=ax)
+        plt.title("2D Position")
+        plt.xlabel("x [m]")
+        plt.ylabel("y [m]")
+        plt.grid()
+        plt.legend(legend)
+
+    def plot_predicted_maneuver(self, **kwargs):
+        uuid_legend = kwargs.pop("uuid_legend", False)
+        if uuid_legend:
+            legend = self.filt_df["id"].unique()
+        else:
+            legend = ["track_" + str(i) for i in range(len(self.filt_df["id"].unique()))]
+
+        # get number of id in dataframe
+        num_id = len(self.filt_df["id"].unique())
+        if num_id == 0:
+            raise ValueError("No id in dataframe")
+        # set figsize related to number of id
+        figsize = (12, 4 * num_id)
+        fig, axs = plt.subplots(num_id, 1, sharex=True, figsize=figsize)
+        
+        # state to numeric
+        state_mapping = {'LeftLaneChange': 1, 'LaneFollow': 0, 'RightLaneChange': -1}
+        # デフォルトのカラーサイクルを取得
+        color_cycle = plt.rcParams['axes.prop_cycle']
+        # イテレータを取得
+        color_iter = itertools.cycle(color_cycle)
+        # plot predicted maneuver for each id
+        for i, id in enumerate(self.filt_df["id"].unique()):
+            data = self.filt_df[self.filt_df["id"] == id]
+            data.loc[:,"maneuver_int_state"] = data["maneuver_state"].map(state_mapping)
+            # pyplot default color cycle
+            color_info = next(color_iter)
+            rgb_color = color_info['color']
+            # get ax
+            ax = axs[i] if num_id > 1 else axs
+            ax.plot(data["time"], data["maneuver_int_state"], "x-", color=rgb_color)
+            ax.set_title("Predicted Maneuver")
+            ax.set_xlabel("time [s]")
+            ax.set_ylabel("maneuver")
+            ax.set_ylim([-1.5, 1.5])
+            ax.grid()
+            ax.legend([legend[i]])
+
+            ax.set_yticks(list(state_mapping.values()))
+            ax.set_yticklabels(list(state_mapping.keys()))
+    
+    def filter_df_between(self, dict_key, bound1, bound2):
+        upper_bound = max(bound1, bound2)
+        lower_bound = min(bound1, bound2)
+        self.filt_df = self.filt_df[(self.filt_df[dict_key] < upper_bound) & (self.filt_df[dict_key] > lower_bound)]
+
+    def crop_df_by_time(self, start_time, end_time):
+        upper_bound = max(start_time, end_time)
+        lower_bound = min(start_time, end_time)
+        start = self.filt_df["time"].min()
+        self.filt_df = self.filt_df[(self.filt_df["time"] < start + upper_bound) & (self.filt_df["time"] > start + lower_bound)]
+    
+    def filter_df_equal(self, dict_key, value):
+        self.filt_df = self.filt_df[self.filt_df[dict_key] == value]
+
+    def filter_df_by_label(self, labels):
+        self.filt_df = self.filt_df[self.filt_df["class_label"].isin(labels)]
+    
+    def filter_reset(self):
+        self.filt_df = self.df.copy()
+
+    def filter_df_by_data_length(self, min_length: int):
+        if min_length < 1:
+            # do nothing
+            return
+        # for each object id in dataframe
+        for id in self.filt_df["id"].unique():
+            # get data length of each object id
+            data_length = len(self.filt_df[self.filt_df["id"] == id])
+            # if data length is less than min_length, remove data
+            if data_length < min_length:
+                self.filt_df = self.filt_df[self.filt_df["id"] != id]
+
+
+
+
+
 def getDetectionData(bagfile, topic_name = "/perception/object_recognition/detection/objects"):
-    topic_dict = get_topics_as_dict(bagfile, [topic_name])[topic_name]
+    topic_dict = get_topics_dict(bagfile, [topic_name])[topic_name]
     detections = []
     for stamp, msg in topic_dict:
         time = stamp

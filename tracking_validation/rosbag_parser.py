@@ -45,7 +45,7 @@ def get_starting_time(uri: str) -> datetime:
     return info.starting_time
 
 
-def get_topics_as_dict(bagfile, topic_list: list):
+def get_topics_dict(bagfile, topic_list: list):
     reader = create_reader(bagfile)
     topic_types = reader.get_all_topics_and_types()
     type_map = {topic_types[i].name: topic_types[i].type for i in range(len(topic_types))}
