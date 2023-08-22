@@ -23,8 +23,18 @@ str_labels_map = {
     "all": []
 }
 
+def main(args):
+    bag_file = args.bag_file
+    show = args.show_figure
+    tracking_topic = args.topic
+    tlim = args.tlim
+    xlim = args.xlim
+    ylim = args.ylim
+    vlim = args.vlim
+    yawlim = args.yawlim
+    label = args.label
+    uuid_legend = args.uuid_legend
 
-def main(bag_file, show = False, tracking_topic = DEFAULT_TOPIC, tlim = [], xlim = [], ylim = [], vlim = [],  yawlim = [], label = DEFAULT_LABEL, uuid_legend = False):
     tp = TrackingParser(bag_file, tracking_topic)
     if tlim:
         tp.crop_df_by_time("t", tlim[0], tlim[1])
@@ -142,4 +152,4 @@ def parse_argument():
 # show main function
 if __name__=="__main__":
     args = parse_argument()
-    main(args.bag_file, args.show_figure, args.topic, args.tlim, args.xlim, args.ylim, args.vlim, args.yawlim, args.label, args.uuid_legend)
+    main(args)
