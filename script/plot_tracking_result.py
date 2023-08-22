@@ -33,6 +33,7 @@ def main(args):
     vlim = args.vlim
     yawlim = args.yawlim
     label = args.label
+    data_length_lim = args.data_length_lim
     uuid_legend = args.uuid_legend
 
     tp = TrackingParser(bag_file, tracking_topic)
@@ -49,7 +50,8 @@ def main(args):
     if label:
         labels = str_labels_map[label]
         tp.filter_df_by_label(labels)
-    
+
+    tp.filter_df_by_data_length(data_length_lim)    
     data = tp.plot_state_and_cov(uuid_legend=uuid_legend)
 
     tp.plot2d(uuid_legend=uuid_legend)
@@ -127,6 +129,14 @@ def parse_argument():
         type=float,
         default=[],
         help="yaw limit [yawmin, yawmax]"
+    )
+
+    # data length limit argument
+    parser.add_argument(
+        "--data_length_lim",
+        type=int,
+        default=0,
+        help="data length limit"
     )
 
     # label
