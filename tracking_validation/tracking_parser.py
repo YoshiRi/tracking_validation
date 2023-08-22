@@ -1,6 +1,8 @@
 from rosbag_parser import get_topics_dict, get_topics_and_tf
 import uuid
 from utils import *
+from parser_base import BaseParser
+
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
@@ -69,16 +71,15 @@ def getTrackerKinematicsDict(trackers: list):
 
 
 
-class TrackingParser:
-    """parse tracking object from bagfile
-    """
-    def __init__(self, bagfile: str, tracking_topic = "/perception/object_recognition/tracking/objects") -> None:
-        data = getTrackingData(bagfile, tracking_topic)
-        self.track_ids = list(data.keys())
-        self.df = self.dict_to_dataframe(data)
+class TrackingParser(BaseParser):
+    def __init__(self, bagfile: str, tracking_topic: str = "/perception/object_recognition/tracking/objects"):
+        super().__init__()
+        self.data = getTrackingData(bagfile, tracking_topic)
+        self.df = self.dict_to_dataframe(self.data)
         self.filt_df = self.df.copy()
 
-    def dict_to_dataframe(self, data):
+    def dict_to_dataframe(self, data: Dict) -> pd.DataFrame:
+        # Extracting the implementation from the original TrackingParser class
         out_df = pd.DataFrame()
         for obj_id in data.keys():
             dict_data = getTrackerKinematicsDict(data[obj_id])
@@ -89,90 +90,8 @@ class TrackingParser:
             out_df = pd.concat([out_df, df], axis=0)
         return out_df
 
-            
-    def plot_kinematics(self, df, x_key, y_key, ax = None, **kwargs):
-        if ax is None:
-            fig, ax = plt.subplots()
-        # extract plt_style from kwargs
-        plt_style = kwargs.pop("plt_style", "x-")
 
-        for id in df["id"].unique():
-            data = df[df["id"] == id]
-            ax.plot(data[x_key], data[y_key], plt_style)
-        return ax
-    
-    def plot_data(self, x_key = "time", y_keys = [],**kwargs):
-        if len(y_keys) == 0:
-            y_keys = ["x", "y", "yaw", "vx", "covariance_x", "covariance_vx","length", "width"]
-        
-        # extract legend form
-        # set original legend if uuid_legend is false
-        uuid_legend = kwargs.pop("uuid_legend", False)
-        if uuid_legend:
-            legend = self.filt_df["id"].unique()
-        else:
-            legend = ["track_" + str(i) for i in range(len(self.filt_df["id"].unique()))]
-
-        cols = int(kwargs.pop("cols", 2))
-        rows = len(y_keys)//cols + len(y_keys)%cols
-        figsize = (8*cols, 5 * rows)
-        fig, axs = plt.subplots(rows, cols, sharex=True, figsize=figsize)
-        axs = axs.reshape(-1)
-        for i, y_key in enumerate(y_keys):
-            self.plot_kinematics(self.filt_df, x_key, y_key, ax=axs[i], **kwargs)   
-            axs[i].set_title(y_key)
-            axs[i].set_xlabel("time [s]")
-            axs[i].grid()
-            axs[i].legend(legend)
-        return fig, axs
-    
-    def plot_state_and_cov(self, **kwargs):
-        x_key = "time"
-        y_keys = ["x", "y", "yaw", "vx", "vyaw", "estimated sin(slip_angle)", "length", "width"]
-        y_cov_keys = ["covariance_x", "covariance_y", "covariance_yaw", "covariance_vx", "covariance_vyaw", "existence_probability"]
-        self.plot_data(x_key, y_keys, **kwargs)
-        self.plot_data(x_key, y_cov_keys, **kwargs)
-
-    def plot2d(self, **kwargs):
-
-        uuid_legend = kwargs.pop("uuid_legend", False)
-        if uuid_legend:
-            legend = self.filt_df["id"].unique()
-        else:
-            legend = ["track_" + str(i) for i in range(len(self.filt_df["id"].unique()))]
-        plt.figure(figsize=(12,12))
-        ax = plt.gca()
-        self.plot_kinematics(self.filt_df, "x", "y", plt_style="x-", ax=ax)
-        plt.title("2D Position")
-        plt.xlabel("x [m]")
-        plt.ylabel("y [m]")
-        plt.grid()
-        plt.legend(legend)
-
-    
-    def filter_df_between(self, dict_key, bound1, bound2):
-        upper_bound = max(bound1, bound2)
-        lower_bound = min(bound1, bound2)
-        self.filt_df = self.filt_df[(self.filt_df[dict_key] < upper_bound) & (self.filt_df[dict_key] > lower_bound)]
-
-    def crop_df_by_time(self, start_time, end_time):
-        upper_bound = max(start_time, end_time)
-        lower_bound = min(start_time, end_time)
-        start = self.filt_df["time"].min()
-        self.filt_df = self.filt_df[(self.filt_df["time"] < start + upper_bound) & (self.filt_df["time"] > start + lower_bound)]
-    
-    def filter_df_equal(self, dict_key, value):
-        self.filt_df = self.filt_df[self.filt_df[dict_key] == value]
-
-    def filter_df_by_label(self, labels):
-        self.filt_df = self.filt_df[self.filt_df["class_label"].isin(labels)]
-    
-    def filter_reset(self):
-        self.filt_df = self.df.copy()
-
-
-
-class PredictionParser:
+class PredictionParser(BaseParser):
     """parse prediction object from bagfile
     """
     def __init__(self, bagfile: str, prediction_topic = "/perception/object_recognition/objects", maneuver_topic = "/perception/object_recognition/prediction/maneuver") -> None:
@@ -218,7 +137,8 @@ class PredictionParser:
             "maneuver_color": maneuver_color
         }
 
-    def dict_to_dataframe(self, data):
+    def dict_to_dataframe(self, data: Dict) -> pd.DataFrame:
+        # Extracting the implementation from the original PredictionParser class
         out_df = pd.DataFrame()
         for obj_id in data.keys():
             dict_data = getTrackerKinematicsDict(data[obj_id])
@@ -229,65 +149,6 @@ class PredictionParser:
             out_df = pd.concat([out_df, df], axis=0)
         return out_df
 
-            
-    def plot_kinematics(self, df, x_key, y_key, ax = None, **kwargs):
-        if ax is None:
-            fig, ax = plt.subplots()
-        # extract plt_style from kwargs
-        plt_style = kwargs.pop("plt_style", "x-")
-
-        for id in df["id"].unique():
-            data = df[df["id"] == id]
-            ax.plot(data[x_key], data[y_key], plt_style)
-        return ax
-    
-    def plot_data(self, x_key = "time", y_keys = [],**kwargs):
-        if len(y_keys) == 0:
-            y_keys = ["x", "y", "yaw", "vx", "covariance_x", "covariance_vx","length", "width"]
-        
-        # extract legend form
-        # set original legend if uuid_legend is false
-        uuid_legend = kwargs.pop("uuid_legend", False)
-        if uuid_legend:
-            legend = self.filt_df["id"].unique()
-        else:
-            legend = ["track_" + str(i) for i in range(len(self.filt_df["id"].unique()))]
-
-        cols = int(kwargs.pop("cols", 2))
-        rows = len(y_keys)//cols + len(y_keys)%cols
-        figsize = (8*cols, 5 * rows)
-        fig, axs = plt.subplots(rows, cols, sharex=True, figsize=figsize)
-        axs = axs.reshape(-1)
-        for i, y_key in enumerate(y_keys):
-            self.plot_kinematics(self.filt_df, x_key, y_key, ax=axs[i], **kwargs)   
-            axs[i].set_title(y_key)
-            axs[i].set_xlabel("time [s]")
-            axs[i].grid()
-            axs[i].legend(legend)
-        return fig, axs
-    
-    def plot_state_and_cov(self, **kwargs):
-        x_key = "time"
-        y_keys = ["x", "y", "yaw", "vx", "vyaw", "estimated sin(slip_angle)", "length", "width"]
-        y_cov_keys = ["covariance_x", "covariance_y", "covariance_yaw", "covariance_vx", "covariance_vyaw", "existence_probability"]
-        self.plot_data(x_key, y_keys, **kwargs)
-        self.plot_data(x_key, y_cov_keys, **kwargs)
-
-    def plot2d(self, **kwargs):
-
-        uuid_legend = kwargs.pop("uuid_legend", False)
-        if uuid_legend:
-            legend = self.filt_df["id"].unique()
-        else:
-            legend = ["track_" + str(i) for i in range(len(self.filt_df["id"].unique()))]
-        plt.figure(figsize=(12,12))
-        ax = plt.gca()
-        self.plot_kinematics(self.filt_df, "x", "y", plt_style="x-", ax=ax)
-        plt.title("2D Position")
-        plt.xlabel("x [m]")
-        plt.ylabel("y [m]")
-        plt.grid()
-        plt.legend(legend)
 
     def plot_predicted_maneuver(self, **kwargs):
         uuid_legend = kwargs.pop("uuid_legend", False)
@@ -329,41 +190,6 @@ class PredictionParser:
 
             ax.set_yticks(list(state_mapping.values()))
             ax.set_yticklabels(list(state_mapping.keys()))
-    
-    def filter_df_between(self, dict_key, bound1, bound2):
-        upper_bound = max(bound1, bound2)
-        lower_bound = min(bound1, bound2)
-        self.filt_df = self.filt_df[(self.filt_df[dict_key] < upper_bound) & (self.filt_df[dict_key] > lower_bound)]
-
-    def crop_df_by_time(self, start_time, end_time):
-        upper_bound = max(start_time, end_time)
-        lower_bound = min(start_time, end_time)
-        start = self.filt_df["time"].min()
-        self.filt_df = self.filt_df[(self.filt_df["time"] < start + upper_bound) & (self.filt_df["time"] > start + lower_bound)]
-    
-    def filter_df_equal(self, dict_key, value):
-        self.filt_df = self.filt_df[self.filt_df[dict_key] == value]
-
-    def filter_df_by_label(self, labels):
-        self.filt_df = self.filt_df[self.filt_df["class_label"].isin(labels)]
-    
-    def filter_reset(self):
-        self.filt_df = self.df.copy()
-
-    def filter_df_by_data_length(self, min_length: int):
-        if min_length < 1:
-            # do nothing
-            return
-        # for each object id in dataframe
-        for id in self.filt_df["id"].unique():
-            # get data length of each object id
-            data_length = len(self.filt_df[self.filt_df["id"] == id])
-            # if data length is less than min_length, remove data
-            if data_length < min_length:
-                self.filt_df = self.filt_df[self.filt_df["id"] != id]
-
-
-
 
 
 def getDetectionData(bagfile, topic_name = "/perception/object_recognition/detection/objects"):
