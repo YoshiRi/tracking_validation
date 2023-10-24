@@ -53,16 +53,20 @@ def check_radar_detection_overlap(detections: list[Objects]):
                 yaw_diff = OrientationToYaw(obj1.kinematics.pose_with_covariance.pose.orientation) - OrientationToYaw(obj2.kinematics.pose_with_covariance.pose.orientation)
                 # normalize radians
                 yaw_diff = abs(np.arctan2(np.sin(yaw_diff), np.cos(yaw_diff)))
+                vel_diff = np.hypot(
+                    obj1.kinematics.twist_with_covariance.twist.linear.x - obj2.kinematics.twist_with_covariance.twist.linear.x,
+                    obj1.kinematics.twist_with_covariance.twist.linear.y - obj2.kinematics.twist_with_covariance.twist.linear.y
+                )
                 # print overlap status
                 time = detected_objects.header.stamp.sec + detected_objects.header.stamp.nanosec * 1e-9
 
                 if iou == 0:# no overlap
-                    results["non_overlap_data"].append([time, distance, yaw_diff, iou])
+                    results["non_overlap_data"].append([time, distance, yaw_diff, iou, vel_diff])
                     continue 
                 # overlap detected
                 results["overlap_count"] += 1
 
-                results["overlap_data"].append([time, distance, yaw_diff, iou])
+                results["overlap_data"].append([time, distance, yaw_diff, iou, vel_diff])
     print("overlap count: ", results["overlap_count"])
     return results
 
@@ -79,7 +83,7 @@ def restrict_max_plot_range(max_x, max_y):
 
 def plot_overlap_results(results, save=False, save_path=""):
     data = results["overlap_data"]
-    df = pd.DataFrame(data, columns=["time", "distance", "yaw_diff", "iou"])
+    df = pd.DataFrame(data, columns=["time", "distance", "yaw_diff", "iou", "v_diff"])
     # df.plot.line(x="time", y="iou")
     # plt.title("overlapped objects iou")
     df.plot.scatter(x="distance", y="yaw_diff")
@@ -89,8 +93,15 @@ def plot_overlap_results(results, save=False, save_path=""):
     if save:
         plt.savefig(save_path + "overlap_distance_yaw_diff.png")
 
+    df.plot.scatter(x="distance", y="v_diff")
+    plt.title("overlapped objects distance vs v_diff")
+    plt.grid()
+    restrict_max_plot_range(20, 10) # 20m, 10m/s
+    if save:
+        plt.savefig(save_path + "overlap_distance_v_diff.png")
+
     data = results["non_overlap_data"]
-    df = pd.DataFrame(data, columns=["time", "distance", "yaw_diff", "iou"])
+    df = pd.DataFrame(data, columns=["time", "distance", "yaw_diff", "iou", "v_diff"])
     df.plot.scatter(x="distance", y="yaw_diff", color="orange")
     plt.title("non overlapped objects distance vs yaw_diff")
     plt.grid()
@@ -99,7 +110,7 @@ def plot_overlap_results(results, save=False, save_path=""):
         plt.savefig(save_path + "non_overlap_distance_yaw_diff.png")
 
 
-def main(bagfile, topic, save=False, save_path="./"):
+def analyze_rosbag(bagfile, topic, save=False, save_path="./"):
     dp = DetectionParser(bagfile, RADAR_TOPIC)
     list_detections = dp.msg_list
 
@@ -113,6 +124,34 @@ def main(bagfile, topic, save=False, save_path="./"):
         plt.show()
     
     return results
+
+
+
+def run_with_multiple_bag_files(arg):
+    import glob
+    path = arg.save_path
+    # bagfiles = glob.glob("/home/yoshiri/Downloads/temp/xx1_kashiwa_radar/*/*")
+    bagfiles = glob.glob("/home/yoshiri/Downloads/temp/radar*/tracking_result/*.db3")
+    path = "odaiba_1/"
+    print(bagfiles)
+
+    total_results = {}
+    total_results["overlap_data"] = []
+    total_results["non_overlap_data"] = []
+    total_results["overlap_count"] = 0
+    for bagfile in bagfiles:
+        print(bagfile)
+        results = analyze_rosbag(bagfile, arg.topic, save=True, save_path=path)
+        # merge results
+        total_results["overlap_data"].extend(results["overlap_data"])
+        total_results["non_overlap_data"].extend(results["non_overlap_data"])
+        total_results["overlap_count"] += results["overlap_count"]
+    
+    # visualize total results
+    plot_overlap_results(total_results, save=True, save_path=path+"total_results_") 
+    print("total overlap count: ", total_results["overlap_count"])
+
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Example argparse script")
@@ -132,7 +171,36 @@ if __name__ == "__main__":
         help="topic name",
     )
 
+    # save path argument
+    parser.add_argument(
+        "--save_path",
+        type=str,
+        default="images/",
+        help="save path",
+    )
+    
+    # multiple bag files flag
+    parser.add_argument(
+        "--multiple_bag_files",
+        type=bool,
+        default=False,
+        help="whether to use multiple bag files or not",
+    )
+    
+    # save flag
+    parser.add_argument(
+        "--save",
+        type=bool,
+        default=False,
+        help="whether to save or not",
+    )
+
     arg = parser.parse_args()
     
     # normal process
-    main(arg.bag_file, arg.topic, save=False, save_path="images/")
+    if not arg.multiple_bag_files:
+        analyze_rosbag(arg.bag_file, arg.topic, save=arg.save, save_path=arg.save_path)
+    else:
+        run_with_multiple_bag_files(arg)
+
+
