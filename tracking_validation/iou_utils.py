@@ -1,6 +1,6 @@
 import math
 import numpy as np
-from autoware_auto_perception_msgs.msg import Shape
+from autoware_auto_perception_msgs.msg import Shape, DetectedObject
 import geometry_msgs.msg as gm
 from shapely.geometry import Polygon
 from tf_transformations import euler_from_quaternion
@@ -96,16 +96,15 @@ def get_union_area(source_polygon: Polygon, target_polygon: Polygon) -> float:
     return union_polygon.area
 
 
-def get_2d_iou(source_object, target_object, min_union_area=0.01):
+def get_2d_iou(source_object:DetectedObject, target_object:DetectedObject, min_union_area=0.01):
     source_polygon = to_polygon_2d(source_object.kinematics.pose_with_covariance.pose, source_object.shape)
-    target_polygon = to_polygon_2d(source_object.kinematics.pose_with_covariance.pose, target_object.shape)
+    target_polygon = to_polygon_2d(target_object.kinematics.pose_with_covariance.pose, target_object.shape)
     intersection_area = get_intersection_area(source_polygon, target_polygon)
     if intersection_area == 0.0:
         return 0.0
     union_area = get_union_area(source_polygon, target_polygon)
     if union_area < min_union_area:
         return 0.0
-
     iou = min(1.0, intersection_area / union_area)
     return iou
 

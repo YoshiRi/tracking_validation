@@ -195,11 +195,13 @@ class PredictionParser(BaseParser):
 def getDetectionData(bagfile, topic_name = "/perception/object_recognition/detection/objects"):
     topic_dict = get_topics_dict(bagfile, [topic_name])[topic_name]
     detections = []
+    msgs = []
     for stamp, msg in topic_dict:
         time = stamp
+        msgs.append(msg)
         for obj in msg.objects:
             detections.append([time, obj])
-    return detections
+    return detections, msgs
 
 def getDetectionKinematicsDicts(detections: list):
     data = {}
@@ -224,8 +226,9 @@ def getDetectionKinematicsDicts(detections: list):
 
 class DetectionParser:
     def __init__(self, bagfile: str, topic_name = "/perception/object_recognition/detection/objects") -> None:
-        detections = getDetectionData(bagfile, topic_name)
-        self.data = getDetectionKinematicsDicts(detections)
+        parsed_detections, listed_msgs = getDetectionData(bagfile, topic_name)
+        self.data = getDetectionKinematicsDicts(parsed_detections)
+        self.msg_list = listed_msgs
 
     def plot_kinematics(self, x_key, y_key, ax = None, **kwargs):
         if ax is None:
