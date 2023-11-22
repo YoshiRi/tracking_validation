@@ -203,7 +203,7 @@ class object2DVisualizer:
             dcc.Checklist(
                 id='topic-checkbox',
                 options=[{'label': i, 'value': i} for i in unique_topics],
-                value=unique_topics,
+                value=[unique_topics[0]],
                 inline=True
             ),
             html.Label('visualization class:'),
@@ -377,5 +377,7 @@ if __name__ == '__main__':
     args = p.parse_args()
     rosbag_file_path = args.rosbag
     topics = args.topics
+    if topics == []:
+        topics = ["/perception/object_recognition/detection/objects", "/perception/object_recognition/tracking/objects", "/perception/object_recognition/detection/clustering/camera_lidar_fusion/objects", "/perception/object_recognition/detection/detection_by_tracker/objects", "/perception/object_recognition/detection/pointpainting/validation/objects" ]
     # rosbag_file_path = "dummy"
     main(rosbag_file_path, topics)
