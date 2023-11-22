@@ -3,3 +3,4 @@
 tracking_validation/eval_test/*
 tracking_validation/perception_eval_log/*
 temp/
+tracking_validation/ongoing/*
