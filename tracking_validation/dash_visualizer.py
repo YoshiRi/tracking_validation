@@ -57,6 +57,9 @@ class DataForVisualize:
         self.data["yaw"] = getYaw(perception_object)
         self.data["length"] = perception_object.shape.dimensions.x
         self.data["width"] = perception_object.shape.dimensions.y
+        twist = getTwist(perception_object)
+        self.data["vx"] = twist[0]
+        self.data["omega"] = twist[5]
         if type(perception_object) == DetectedObject:
             self.data["uuid"] = []
         else:
