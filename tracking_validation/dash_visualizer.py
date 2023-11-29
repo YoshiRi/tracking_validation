@@ -103,7 +103,7 @@ class_name_map = {
 
 
 
-def generate_rectangle_xy_series(x, y, yaw, length, width):
+def generate_rectangle_xy_series(x, y, yaw, length, width, flag:bool = False):
     # Calculate the corner points of the rectangle
     theta = yaw
     cos_theta = math.cos(theta)
@@ -111,7 +111,7 @@ def generate_rectangle_xy_series(x, y, yaw, length, width):
     half_length = length / 2
     half_width = width / 2
 
-    x0 = x - half_length * cos_theta - half_width * sin_theta
+    x0 = x - half_length * cos_theta - half_width * sin_theta # 
     y0 = y - half_length * sin_theta + half_width * cos_theta
     x1 = x + half_length * cos_theta - half_width * sin_theta
     y1 = y + half_length * sin_theta + half_width * cos_theta
@@ -119,8 +119,24 @@ def generate_rectangle_xy_series(x, y, yaw, length, width):
     y2 = y + half_length * sin_theta - half_width * cos_theta
     x3 = x - half_length * cos_theta + half_width * sin_theta
     y3 = y - half_length * sin_theta - half_width * cos_theta
-    return [x0, x1, x2, x3, x0], [y0, y1, y2, y3, y0]
+    x_series = [x0, x1, x2, x3, x0]
+    y_series = [y0, y1, y2, y3, y0]
 
+    # Add an orientation indicator if flag is True
+    if flag:
+        # Calculate the midpoint of the front side of the rectangle
+        front_mid_x = (x1 + x2) / 2
+        front_mid_y = (y1 + y2) / 2
+
+        # Calculate a point slightly forward of the midpoint
+        orientation_length = length * 0.2  # 20% of the length of the rectangle
+        orientation_x = front_mid_x + orientation_length * cos_theta
+        orientation_y = front_mid_y + orientation_length * sin_theta
+
+        # Insert the orientation point into the series
+        x_series.insert(2, orientation_x)
+        y_series.insert(2, orientation_y)
+    return x_series, y_series
 class object2DVisualizer:
     """visualize object in 2D map with plotly, dash
 
@@ -181,7 +197,16 @@ class object2DVisualizer:
 
         self.app = dash.Dash(__name__)
         self.app.layout = html.Div([
-            dcc.Graph(id='graph', style={'height': '80vh'}),
+            dcc.Graph(id='graph', style={'height': '80vh'},
+                        config={
+                            'staticPlot': False,        # グラフが静的でないことを確認
+                            'scrollZoom': True,         # ホイールズームを有効にする
+                            'doubleClick': 'reset',     # ダブルクリックでグラフをリセット
+                            'showTips': True,           # ユーザー操作のヒントを表示
+                            'displayModeBar': True,     # ツールバーを表示
+                            'modeBarButtonsToRemove': ['zoom2d', 'select2d', 'lasso2d'],  # 不要なボタンを削除
+                            'modeBarButtonsToAdd': ['pan2d']  # パン操作のみを追加
+                        }),
             html.Label('Select timestamp[s] to focus:'),
             dcc.Slider(
                 id='slider',
@@ -273,7 +298,7 @@ class object2DVisualizer:
                     else:
                         raise NotImplementedError
 
-                    x_series, y_series = generate_rectangle_xy_series(row["x"], row["y"], row["yaw"], row["length"], row["width"])
+                    x_series, y_series = generate_rectangle_xy_series(row["x"], row["y"], row["yaw"], row["length"], row["width"], flag=True)
                     traces.append(go.Scatter(
                         x=x_series,
                         y=y_series,
@@ -381,6 +406,10 @@ if __name__ == '__main__':
     rosbag_file_path = args.rosbag
     topics = args.topics
     if topics == []:
-        topics = ["/perception/object_recognition/detection/objects", "/perception/object_recognition/tracking/objects", "/perception/object_recognition/detection/clustering/camera_lidar_fusion/objects", "/perception/object_recognition/detection/detection_by_tracker/objects", "/perception/object_recognition/detection/pointpainting/validation/objects" ]
+        topics = ["/perception/object_recognition/detection/objects", "/perception/object_recognition/tracking/objects", 
+                  "/perception/object_recognition/detection/clustering/camera_lidar_fusion/objects", "/perception/object_recognition/detection/detection_by_tracker/objects", 
+                  "/perception/object_recognition/detection/pointpainting/validation/objects", "/perception/object_recognition/detection/centerpoint/validation/objects",
+                  "/perception/object_recognition/detection/radar/far_objects", "/perception/object_recognition/tracking/radar/far_objects",
+                  ]
     # rosbag_file_path = "dummy"
     main(rosbag_file_path, topics)
