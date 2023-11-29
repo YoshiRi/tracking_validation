@@ -288,14 +288,12 @@ class object2DVisualizer:
                 layout = go.Layout(yaxis=dict(scaleanchor='x',), dragmode="pan", hovermode="closest")
                 self.fig = make_subplots(rows=1, cols=2, shared_xaxes=False, shared_yaxes=False,
                                 subplot_titles=('2D Plot', 'Time Series'))
-                # plot right time series
-                self.fig = self.plot_time_series(self.fig, df_timeseries, selected_time, selected_time_range, key="x")
                 # print(fig.data)
             else:
                 layout = fig_dict["layout"]
             
             # remove old traces in left 2d plot
-            self.fig.data = [trace for trace in self.fig.data if trace.xaxis == 'x2']
+            self.fig.data = []
             # update left 2d plot
             traces_2d = []
             if "bounding_box" in selected_object_type:
@@ -306,8 +304,9 @@ class object2DVisualizer:
                 self.fig.add_trace(trace, row=1, col=1)
             self.fig.update_layout(layout)
 
-
-            # xlim time series
+            # time series plot
+            self.fig = self.plot_time_series(self.fig, df_timeseries, selected_time, selected_time_range, key="x")
+            # self.fig.add_vline(x=selected_time, line_width=1, line_dash="dash", line_color="red", row=1, col=2)
             self.fig.update_xaxes(range=[selected_time - 2. * selected_time_range, selected_time +  2. * selected_time_range], row=1, col=2)
             return self.fig
         
