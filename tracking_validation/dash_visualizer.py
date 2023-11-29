@@ -3,6 +3,7 @@ import dash
 from dash import dcc, html
 from dash.dependencies import Input, Output, State
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import math
 import random
 import pandas as pd
@@ -18,12 +19,14 @@ from utils import *
 from autoware_auto_perception_msgs.msg import ObjectClassification 
 # object class label: ex) ObjectClassification.BUS == int(3)
 
+from typing import Dict, List, Tuple, Union
+
 # dash colors
 DEFAULT_PLOTLY_COLORS=['rgb(31, 119, 180)', 'rgb(255, 127, 14)',
             'rgb(44, 160, 44)', 'rgb(214, 39, 40)',
             'rgb(148, 103, 189)', 'rgb(140, 86, 75)',
             'rgb(227, 119, 194)', 'rgb(127, 127, 127)',
-            'rgb(188, 189, 34)', 'rgb(23, 190, 207)']
+            'rgb(188, 189, 34)', 'rgb(255, 255, 0)']
 
 # symbols: circle, square, diamond, cross, x, triangle, pentagon, hexagram, star, diamond, hourglass, bowtie, asterisk, hash
 DEFAULT_MARKER_SYMBOLS = ['circle', 'square', 'diamond', 'cross', 'x', 'triangle', 'pentagon', 'hexagram', 'star', 'diamond', 'hourglass', 'bowtie', 'asterisk', 'hash']
@@ -78,7 +81,7 @@ class DataForVisualize:
 
 
 class_color_map = {
-    0: "rgb(200, 200, 200)", # unkown
+    0: "rgb(200, 200, 200)", # unknown
     1: "rgb(255, 0, 0)", 
     2: "rgb(0, 255, 0)",
     3: "rgb(0, 0, 255)",
@@ -154,6 +157,7 @@ class object2DVisualizer:
         self.load_rosbag_data(rosbag_file_path)    
         # init dash app
         self.init_dash_app()
+        self.fig = None
     
     def select_file_gui(self):
         # select rosbag file from tkinter gui
@@ -186,7 +190,7 @@ class object2DVisualizer:
         unique_uuids = self.df["uuid"].unique()
         self.uuid_color_map = {}
         self.topic_marker_map = {}
-        self.topic_color_map = {}
+        self.topic_color_map: Dict[int,str] = {}
         for uuid in unique_uuids:
             self.uuid_color_map[uuid] = DEFAULT_PLOTLY_COLORS[random.randint(0, len(DEFAULT_PLOTLY_COLORS)-1)]
         
@@ -197,7 +201,7 @@ class object2DVisualizer:
 
         self.app = dash.Dash(__name__)
         self.app.layout = html.Div([
-            dcc.Graph(id='graph', style={'height': '80vh'},
+            dcc.Graph(id='graph', style={'height': '80vh'}, # 80% of vertical height
                         config={
                             'staticPlot': False,        # グラフが静的でないことを確認
                             'scrollZoom': True,         # ホイールズームを有効にする
@@ -271,57 +275,135 @@ class object2DVisualizer:
         State('graph', 'figure')
         ]
         )
-        def update_figure(selected_time, selected_time_range, selected_topics, selected_classes, selected_object_type, color_policy, figure):
-            traces = []
+        def update_figure(selected_time, selected_time_range, selected_topics, selected_classes, selected_object_type, color_policy, fig_dict: Dict):
             # filter df by selected time range
             time_range_condition = (self.df["time"] >= selected_time - selected_time_range) & (self.df["time"] <= selected_time + selected_time_range)
             class_condition = self.df["classification"].isin(selected_classes)
             topic_condition = self.df["topic_name"].isin(selected_topics)
             df_filtered = self.df[time_range_condition & class_condition & topic_condition]
+            df_timeseries = self.df[class_condition & topic_condition]
 
-            # keep layout
-            if figure is None:
-                layout = go.Layout(yaxis=dict(scaleanchor='x',), )
+            # first time to plot
+            if fig_dict is None:
+                layout = go.Layout(yaxis=dict(scaleanchor='x',), dragmode="pan", hovermode="closest")
+                self.fig = make_subplots(rows=1, cols=2, shared_xaxes=False, shared_yaxes=False,
+                                subplot_titles=('2D Plot', 'Time Series'))
+                # plot right time series
+                self.fig = self.plot_time_series(self.fig, df_timeseries, selected_time, selected_time_range, key="x")
+                # print(fig.data)
             else:
-                layout = figure["layout"]
+                layout = fig_dict["layout"]
             
-            # generate traces
+            # remove old traces in left 2d plot
+            self.fig.data = [trace for trace in self.fig.data if trace.xaxis == 'x2']
+            # update left 2d plot
+            traces_2d = []
+            if "bounding_box" in selected_object_type:
+                traces_2d += self.plot_2d_bbox_traces(df_filtered, color_policy)
+            if "object_center" in selected_object_type:
+                traces_2d += self.plot_2d_center_traces(df_filtered, color_policy)
+            for trace in traces_2d:
+                self.fig.add_trace(trace, row=1, col=1)
+            self.fig.update_layout(layout)
+
+
+            # xlim time series
+            self.fig.update_xaxes(range=[selected_time - 2. * selected_time_range, selected_time +  2. * selected_time_range], row=1, col=2)
+            return self.fig
+        
+    def draw_vline(self, fig: go.Figure, x: float):
+        """draw vertical line in figure
+
+        Args:
+            fig (go.Figure): _description_
+            x (float): _description_
+        """
+        pass
+
+    def plot_time_series(self, fig: go.Figure, df_filtered: pd.DataFrame, selected_time: float, selected_time_range: float, key:str = "x"):
+        """plot time series
+
+        Args:
+            df_filtered (pd.DataFrame): _description_
+            selected_time (float): _description_
+            selected_time_range (float): _description_
+        """
+        # plot time series
+        unique_topics = df_filtered["topic_name"].unique()
+        for topic in unique_topics:
+            tmp_df = df_filtered[df_filtered["topic_name"] == topic]
+            unique_uuids = tmp_df["uuid"].unique()
+            for uuid in unique_uuids:
+                plot_df = tmp_df[tmp_df["uuid"] == uuid]
+                draw_mode:str = "lines" if uuid else "markers"
+                # draw time series
+                fig.add_trace(go.Scatter(
+                    x=plot_df["time"],
+                    y=plot_df[key],
+                    mode=draw_mode,
+                    line=dict(color=self.uuid_color_map[uuid], width=1),
+                    hoverinfo="none",
+                    showlegend=False
+                ), row=1, col=2)
+
+        return fig
+
+    # plot 2d 
+    def plot_2d_bbox_traces(self, df_filtered: pd.DataFrame, color_policy: str = "topic name"):
+        """plot 2d bounding box traces with plotly
+
+        Args:
+            df_filtered (pd.DataFrame): _description_
+        Returns:
+            2d_traces (list): list of traces
+        """
+        # generate traces
+        traces = []
+        for index, row in df_filtered.iterrows():
+            if color_policy == "topic name":
+                # color determined by topic name 
+                color = self.topic_color_map[row["topic_name"]]
+            elif color_policy == "class label":
+                # color determined by class
+                color = class_color_map[row["classification"]]
+            else:
+                raise NotImplementedError
             
-            for index, row in df_filtered.iterrows():
-                if "bounding_box" in selected_object_type:
-                    if color_policy == "topic name":
-                        # color determined by topic name 
-                        color = self.topic_color_map[row["topic_name"]]
-                    elif color_policy == "class label":
-                        # color determined by class
-                        color = class_color_map[row["classification"]]
-                    else:
-                        raise NotImplementedError
 
-                    x_series, y_series = generate_rectangle_xy_series(row["x"], row["y"], row["yaw"], row["length"], row["width"], flag=True)
-                    traces.append(go.Scatter(
-                        x=x_series,
-                        y=y_series,
-                        mode="lines",
-                        line=dict(color=color, width=1),
-                        fill="none",
-                        hoverinfo="none",
-                        showlegend=False
-                    ))
+            x_series, y_series = generate_rectangle_xy_series(row["x"], row["y"], row["yaw"], row["length"], row["width"], flag=True)
+            traces.append(go.Scatter(
+                x=x_series,
+                y=y_series,
+                mode="lines",
+                line=dict(color=color, width=1),
+                fill="none",
+                hoverinfo="none",
+                showlegend=False
+            ))
+        return traces
+    
+    def plot_2d_center_traces(self, df_filtered: pd.DataFrame, color_policy: str = "topic name"):
+        """plot 2d center traces with plotly
 
-                if "object_center" in selected_object_type:
-                    traces.append(go.Scatter(
-                        x=[row["x"]],
-                        y=[row["y"]],
-                        mode="markers",
-                        # line with marker with random color
-                        marker=dict(color=self.uuid_color_map[row["uuid"]], size=5, symbol=self.topic_marker_map[row["topic_name"]]),
-                        hoverinfo="none",
-                        #label=" ".join(str(x) for x in row["uuid"]),
-                        showlegend=False
-                    ))
-                
-            return {'data': traces, 'layout': layout}
+        Args:
+            df_filtered (pd.DataFrame): _description_
+        Returns:
+            2d_traces (list): list of traces
+        """
+        traces = []
+        for index, row in df_filtered.iterrows():
+            traces.append(go.Scatter(
+                x=[row["x"]],
+                y=[row["y"]],
+                mode="markers",
+                # line with marker with random color
+                marker=dict(color=self.uuid_color_map[row["uuid"]], size=5, symbol=self.topic_marker_map[row["topic_name"]]),
+                hoverinfo="none",
+                #label=" ".join(str(x) for x in row["uuid"]),
+                showlegend=False
+            ))
+        return traces
+
 
     def create_random_dummy_data(self, num: int):
         """create dummy data for testing
@@ -375,7 +457,7 @@ class object2DVisualizer:
 
     def run_server(self):
         # do not reload
-        self.app.run_server(debug=True, use_reloader=False)
+        self.app.run_server(debug=True, use_reloader=False, port=8051)
         print("quit dash server!")
 
 
