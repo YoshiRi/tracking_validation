@@ -259,6 +259,19 @@ class object2DVisualizer:
                 value = 'class label',
                 inline=True
             ),
+            dcc.Dropdown(
+                id='ts-dropdown',
+                options=[
+                    {'label': 'x', 'value': 'x'},
+                    {'label': 'y', 'value': 'y'},
+                    {'label': 'yaw', 'value': 'yaw'},
+                    {'label': 'length', 'value': 'length'},
+                    {'label': 'width', 'value': 'width'},
+                    {'label': 'vx', 'value': 'vx'},
+                    {'label': 'omega', 'value': 'omega'},
+                ],
+                value='yaw'  # デフォルトの値
+            ),
         ], style={'height': '100vh'})
 
 
@@ -272,10 +285,11 @@ class object2DVisualizer:
         Input('class-checkbox', 'value'),
         Input('object-mark-checkbox', 'value'),
         Input('radio-items', 'value'),
+        Input('ts-dropdown', 'value'),
         State('graph', 'figure')
         ]
         )
-        def update_figure(selected_time, selected_time_range, selected_topics, selected_classes, selected_object_type, color_policy, fig_dict: Dict):
+        def update_figure(selected_time, selected_time_range, selected_topics, selected_classes, selected_object_type, color_policy, time_series_key,fig_dict: Dict):
             # filter df by selected time range
             time_range_condition = (self.df["time"] >= selected_time - selected_time_range) & (self.df["time"] <= selected_time + selected_time_range)
             class_condition = self.df["classification"].isin(selected_classes)
@@ -305,8 +319,10 @@ class object2DVisualizer:
             self.fig.update_layout(layout)
 
             # time series plot
-            self.fig = self.plot_time_series(self.fig, df_timeseries, selected_time, selected_time_range, key="x")
+            self.fig = self.plot_time_series(self.fig, df_timeseries, selected_time, selected_time_range, key=time_series_key)
             # self.fig.add_vline(x=selected_time, line_width=1, line_dash="dash", line_color="red", row=1, col=2)
+            # update subplot title in right time series plot
+            self.fig.update_layout(title_text="Time Series:" + time_series_key, title_x=0.5, title_y=0.9, title_font_size=20, title_font_family="Arial")
             self.fig.update_xaxes(range=[selected_time - 2. * selected_time_range, selected_time +  2. * selected_time_range], row=1, col=2)
             return self.fig
         
