@@ -1,6 +1,5 @@
 # plotly visualizer
-import dash
-from dash import dcc, html
+from dash import dcc, html, Dash
 from dash.dependencies import Input, Output, State
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -169,8 +168,10 @@ class object2DVisualizer:
     def init_dash_app(self):
         """decide layout and set callback
         """
+        self.enable_xy_crop = True
         self.set_dash_app_layout()
         self.set_dash_app_callback()
+        self.toggle_crop() # default crop is off after init
 
     def set_dash_app_layout(self):
         # config data
@@ -184,7 +185,7 @@ class object2DVisualizer:
         unique_topics = self.df["topic_name"].unique()
         unique_classes = self.df["classification"].unique()
         object_type = ["bounding_box", "object_center"]
-        timestamp_range = [0.05, 0.1, 0.5, 1, 2, 5, 10] # log scale for slider
+        timestamp_range = [0.05, 0.1, 0.5, 1, 2, 3, 5, 7, 10] # log scale for slider
 
         # search unique uuid
         unique_uuids = self.df["uuid"].unique()
@@ -199,7 +200,7 @@ class object2DVisualizer:
             self.topic_marker_map[unique_topic] = DEFAULT_MARKER_SYMBOLS[iter % symbol_num]
             self.topic_color_map[unique_topic] = DEFAULT_PLOTLY_COLORS[iter % len(DEFAULT_PLOTLY_COLORS)]
 
-        self.app = dash.Dash(__name__)
+        self.app = Dash(__name__)
         self.app.layout = html.Div([
             dcc.Graph(id='graph', style={'height': '80vh'}, # 80% of vertical height
                         config={
@@ -209,7 +210,7 @@ class object2DVisualizer:
                             'showTips': True,           # ユーザー操作のヒントを表示
                             'displayModeBar': True,     # ツールバーを表示
                             'modeBarButtonsToRemove': ['zoom2d', 'select2d', 'lasso2d'],  # 不要なボタンを削除
-                            'modeBarButtonsToAdd': ['pan2d']  # パン操作のみを追加
+                            'modeBarButtonsToAdd': ['pan2d', 'select2d']  # パン操作のみを追加
                         }),
             html.Label('Select timestamp[s] to focus:'),
             dcc.Slider(
@@ -231,6 +232,13 @@ class object2DVisualizer:
                 marks={i: '{}'.format(i) for i in timestamp_range},
                 step=None
             ),
+            # toggle crop button
+            html.Label('Crop: red is on, green is off'),
+            html.Div([
+                html.Button('Toggle Crop On/Off', id='crop-button', n_clicks=0),
+                html.Button('Update Range', id='update-range-button', n_clicks=0)
+            ]),
+
             html.Label('visualization topic:'),
             dcc.Checklist(
                 id='topic-checkbox',
@@ -259,6 +267,7 @@ class object2DVisualizer:
                 value = 'class label',
                 inline=True
             ),
+            html.Label('Time series key:'),
             dcc.Dropdown(
                 id='ts-dropdown',
                 options=[
@@ -274,6 +283,19 @@ class object2DVisualizer:
             ),
         ], style={'height': '100vh'})
 
+    def toggle_crop(self):
+        #set callback
+        @self.app.callback(
+            Output('crop-button', 'style'),
+            [Input('crop-button', 'n_clicks')]
+        )
+        def toggle_crop_callback(n_clicks):
+            # do not use n_clicks
+            self.enable_xy_crop = not self.enable_xy_crop # toggle
+            if self.enable_xy_crop:
+                return {'background-color': 'red'}
+            else:
+                return {'background-color': 'green'}
 
     def set_dash_app_callback(self):
         # set callback
@@ -285,29 +307,48 @@ class object2DVisualizer:
         Input('class-checkbox', 'value'),
         Input('object-mark-checkbox', 'value'),
         Input('radio-items', 'value'),
+        Input('update-range-button', 'n_clicks'),
         Input('ts-dropdown', 'value'),
         State('graph', 'figure')
         ]
         )
-        def update_figure(selected_time, selected_time_range, selected_topics, selected_classes, selected_object_type, color_policy, time_series_key,fig_dict: Dict):
+        def update_figure(selected_time, selected_time_range, selected_topics, selected_classes, selected_object_type, color_policy, update_crop, time_series_key,fig_dict: Dict):
             # filter df by selected time range
             time_range_condition = (self.df["time"] >= selected_time - selected_time_range) & (self.df["time"] <= selected_time + selected_time_range)
             class_condition = self.df["classification"].isin(selected_classes)
             topic_condition = self.df["topic_name"].isin(selected_topics)
             df_filtered = self.df[time_range_condition & class_condition & topic_condition]
             df_timeseries = self.df[class_condition & topic_condition]
+            # if toggle is chosed, crop xy range
+            if self.enable_xy_crop:
+                try: # filter out when fig_dict is None or no range information
+                    layout = fig_dict["layout"]
+                    x_range = layout['xaxis']['range']
+                    y_range = layout['yaxis']['range']
+                    x_range_condition = (df_timeseries["x"] >= x_range[0]) & (df_timeseries["x"] <= x_range[1])
+                    y_range_condition = (df_timeseries["y"] >= y_range[0]) & (df_timeseries["y"] <= y_range[1])
+                    df_timeseries = df_timeseries[x_range_condition & y_range_condition]
+                    # print(x_range, y_range)
+                except Exception as e:
+                    print(e)
 
             # first time to plot
             if fig_dict is None:
                 layout = go.Layout(yaxis=dict(scaleanchor='x',), dragmode="pan", hovermode="closest")
                 self.fig = make_subplots(rows=1, cols=2, shared_xaxes=False, shared_yaxes=False,
                                 subplot_titles=('2D Plot', 'Time Series'))
-                # print(fig.data)
             else:
                 layout = fig_dict["layout"]
             
             # remove old traces in left 2d plot
-            self.fig.data = []
+            try:
+                self.fig.data = []
+            except Exception as e:
+                print(e, "no data in fig. create new fig")
+                layout = go.Layout(yaxis=dict(scaleanchor='x',), dragmode="pan", hovermode="closest")
+                self.fig = make_subplots(rows=1, cols=2, shared_xaxes=False, shared_yaxes=False,
+                                subplot_titles=('2D Plot', 'Time Series'))
+
             # update left 2d plot
             traces_2d = []
             if "bounding_box" in selected_object_type:
@@ -319,11 +360,11 @@ class object2DVisualizer:
             self.fig.update_layout(layout)
 
             # time series plot
-            self.fig = self.plot_time_series(self.fig, df_timeseries, selected_time, selected_time_range, key=time_series_key)
-            # self.fig.add_vline(x=selected_time, line_width=1, line_dash="dash", line_color="red", row=1, col=2)
+            self.plot_time_series(self.fig, df_timeseries, selected_time, selected_time_range, key=time_series_key)
             # update subplot title in right time series plot
             self.fig.update_layout(title_text="Time Series:" + time_series_key, title_x=0.5, title_y=0.9, title_font_size=20, title_font_family="Arial")
-            self.fig.update_xaxes(range=[selected_time - 2. * selected_time_range, selected_time +  2. * selected_time_range], row=1, col=2)
+            self.fig.update_xaxes(range=[selected_time - selected_time_range, selected_time +  selected_time_range], row=1, col=2)
+            self.fig.update_yaxes(range=[df_timeseries[time_series_key].min(), df_timeseries[time_series_key].max()], row=1, col=2)
             return self.fig
         
     def draw_vline(self, fig: go.Figure, x: float):
@@ -360,8 +401,6 @@ class object2DVisualizer:
                     hoverinfo="none",
                     showlegend=False
                 ), row=1, col=2)
-
-        return fig
 
     # plot 2d 
     def plot_2d_bbox_traces(self, df_filtered: pd.DataFrame, color_policy: str = "topic name"):
@@ -503,7 +542,7 @@ if __name__ == '__main__':
     rosbag_file_path = args.rosbag
     topics = args.topics
     if topics == []:
-        topics = ["/perception/object_recognition/detection/objects", "/perception/object_recognition/tracking/objects", 
+        topics = ["/perception/object_recognition/detection/objects", "/perception/object_recognition/tracking/objects","/perception/object_recognition/tracking/near_objects", 
                   "/perception/object_recognition/detection/clustering/camera_lidar_fusion/objects", "/perception/object_recognition/detection/detection_by_tracker/objects", 
                   "/perception/object_recognition/detection/pointpainting/validation/objects", "/perception/object_recognition/detection/centerpoint/validation/objects",
                   "/perception/object_recognition/detection/radar/far_objects", "/perception/object_recognition/tracking/radar/far_objects",
