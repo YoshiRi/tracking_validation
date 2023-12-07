@@ -278,6 +278,8 @@ class DetctionAndTrackingParser:
             topics = topics_dict[topic_name]
             for stamp, msg in topics:
                 time = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9 # use message time
+                time_ = float(stamp) * 1e-9 # use stamp time
+                diff_time = time_ - time
                 self.max_time = max(self.max_time, time)
                 self.min_time = min(self.min_time, time)
 
@@ -288,7 +290,7 @@ class DetctionAndTrackingParser:
                     obj = self.transform_object(map_frame, obj_frame, obj, msg.header.stamp)
                     if obj is None:
                         continue
-                    self.data[topic_name].append([time, obj])
+                    self.data[topic_name].append([time, obj, diff_time])
 
 
     def calc_self_pose(self):

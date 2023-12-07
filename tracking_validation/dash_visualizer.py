@@ -204,13 +204,13 @@ class object2DVisualizer:
         self.app.layout = html.Div([
             dcc.Graph(id='graph', style={'height': '80vh'}, # 80% of vertical height
                         config={
-                            'staticPlot': False,        # グラフが静的でないことを確認
-                            'scrollZoom': True,         # ホイールズームを有効にする
-                            'doubleClick': 'reset',     # ダブルクリックでグラフをリセット
-                            'showTips': True,           # ユーザー操作のヒントを表示
-                            'displayModeBar': True,     # ツールバーを表示
-                            'modeBarButtonsToRemove': ['zoom2d', 'select2d', 'lasso2d'],  # 不要なボタンを削除
-                            'modeBarButtonsToAdd': ['pan2d', 'select2d']  # パン操作のみを追加
+                            'staticPlot': False,        # check if we can use static plot
+                            'scrollZoom': True,         # zoom with scroll
+                            'doubleClick': 'reset',     # reset zoom with double click
+                            'showTips': True,           # show tips
+                            'displayModeBar': True,     # display mode bar
+                            'modeBarButtonsToRemove': ['zoom2d',  'lasso2d'],  # remove zoom and lasso
+                            'modeBarButtonsToAdd': ['pan2d', 'select2d']  # add pan and select
                         }),
             html.Label('Select timestamp[s] to focus:'),
             dcc.Slider(
@@ -278,6 +278,7 @@ class object2DVisualizer:
                     {'label': 'width', 'value': 'width'},
                     {'label': 'vx', 'value': 'vx'},
                     {'label': 'omega', 'value': 'omega'},
+                    {'label': 'elapsed_time', 'value': 'elapsed_time'}
                 ],
                 value='yaw'  # デフォルトの値
             ),
@@ -360,7 +361,7 @@ class object2DVisualizer:
             self.fig.update_layout(layout)
 
             # time series plot
-            self.plot_time_series(self.fig, df_timeseries, selected_time, selected_time_range, key=time_series_key)
+            self.plot_time_series(self.fig, df_timeseries, selected_time, selected_time_range, color_policy, time_series_key )
             # update subplot title in right time series plot
             self.fig.update_layout(title_text="Time Series:" + time_series_key, title_x=0.5, title_y=0.9, title_font_size=20, title_font_family="Arial")
             self.fig.update_xaxes(range=[selected_time - selected_time_range, selected_time +  selected_time_range], row=1, col=2)
@@ -376,7 +377,7 @@ class object2DVisualizer:
         """
         pass
 
-    def plot_time_series(self, fig: go.Figure, df_filtered: pd.DataFrame, selected_time: float, selected_time_range: float, key:str = "x"):
+    def plot_time_series(self, fig: go.Figure, df_filtered: pd.DataFrame, selected_time: float, selected_time_range: float, color_policy: str = "topic name", key:str = "x"):
         """plot time series
 
         Args:
@@ -389,15 +390,17 @@ class object2DVisualizer:
         for topic in unique_topics:
             tmp_df = df_filtered[df_filtered["topic_name"] == topic]
             unique_uuids = tmp_df["uuid"].unique()
+            color = self.topic_color_map[topic]
             for uuid in unique_uuids:
                 plot_df = tmp_df[tmp_df["uuid"] == uuid]
                 draw_mode:str = "lines" if uuid else "markers"
+                color = color if color_policy == "topic name" else self.uuid_color_map[uuid]
                 # draw time series
                 fig.add_trace(go.Scatter(
                     x=plot_df["time"],
                     y=plot_df[key],
                     mode=draw_mode,
-                    line=dict(color=self.uuid_color_map[uuid], width=1),
+                    line=dict(color=color, width=1),
                     hoverinfo="none",
                     showlegend=False
                 ), row=1, col=2)
@@ -499,12 +502,15 @@ class object2DVisualizer:
         temp_list = []
         for topic_name in data:
             for topic in  data[topic_name]:
+                # topic data is already parsed into list of perception object
                 data_dict = {}
                 time = topic[0]
                 obj = topic[1]
+                diff_time = topic[2]
                 viz_data = DataForVisualize()
                 viz_data.fromPerceptionObjectsWithTime(obj, time)
                 viz_data.setTopicName(topic_name)
+                viz_data.data["elapsed_time"] = diff_time
                 temp_list.append(viz_data.data)
         self.df = pd.DataFrame(temp_list)
 
@@ -542,10 +548,16 @@ if __name__ == '__main__':
     rosbag_file_path = args.rosbag
     topics = args.topics
     if topics == []:
+        # causion: too much topics make visualization slow.
+        #          we recommend to comment out topics you don't need
         topics = ["/perception/object_recognition/detection/objects", "/perception/object_recognition/tracking/objects","/perception/object_recognition/tracking/near_objects", 
                   "/perception/object_recognition/detection/clustering/camera_lidar_fusion/objects", "/perception/object_recognition/detection/detection_by_tracker/objects", 
                   "/perception/object_recognition/detection/pointpainting/validation/objects", "/perception/object_recognition/detection/centerpoint/validation/objects",
                   "/perception/object_recognition/detection/radar/far_objects", "/perception/object_recognition/tracking/radar/far_objects",
+                  "/tmp/perception/object_recognition/detection/objects", "/tmp/perception/object_recognition/tracking/objects","/tmp/perception/object_recognition/tracking/near_objects",
+                    # "/tmp/perception/object_recognition/detection/clustering/camera_lidar_fusion/objects", "/tmp/perception/object_recognition/detection/detection_by_tracker/objects",
+                    "/tmp/perception/object_recognition/detection/pointpainting/validation/objects", "/tmp/perception/object_recognition/detection/centerpoint/validation/objects",
+                    # "/tmp/perception/object_recognition/detection/radar/far_objects", "/tmp/perception/object_recognition/tracking/radar/far_objects",
                   ]
     # rosbag_file_path = "dummy"
     main(rosbag_file_path, topics)
