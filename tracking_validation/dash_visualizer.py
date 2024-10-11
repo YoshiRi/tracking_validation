@@ -11,6 +11,7 @@ import numpy as np
 # selecter
 import tkinter as tk
 from tkinter import filedialog
+import os
 
 # data parser
 from tracking_parser import DetctionAndTrackingParser
@@ -159,11 +160,17 @@ class object2DVisualizer:
         self.fig = None
     
     def select_file_gui(self):
-        # select rosbag file from tkinter gui
-        root = tk.Tk()
-        root.withdraw()  # do not show tkinter window
-        file_path = filedialog.askopenfilename()  # get full file path
+        if os.getenv('DISPLAY'):
+            root = tk.Tk()
+            root.withdraw()  # Do not show Tkinter window
+            file_path = filedialog.askopenfilename()  # Get full file path
+        else:
+            file_path = input("Enter the path to the ROS bag file: ")
         return file_path
+    
+    def parse_contents(self, contents, filename):
+        print("currently not supported")
+        # I gave up to implement this function because with browser, it is difficult to read full path of local file and we need the full path to read the file.
 
     def init_dash_app(self):
         """decide layout and set callback
@@ -202,7 +209,26 @@ class object2DVisualizer:
 
         self.app = Dash(__name__)
         self.app.layout = html.Div([
-            dcc.Graph(id='graph', style={'height': '80vh'}, # 80% of vertical height
+                        dcc.Upload(
+                            id='upload-data',
+                            children=html.Div([
+                                'Drag and Drop or ',
+                                html.A('Select Files')
+                            ]),
+                            style={
+                                'width': '100%',
+                                'height': '60px',
+                                'lineHeight': '60px',
+                                'borderWidth': '1px',
+                                'borderStyle': 'dashed',
+                                'borderRadius': '5px',
+                                'textAlign': 'center',
+                                'margin': '10px'
+                            },
+                            multiple=False  # 一度に1つのファイルのみアップロード
+                        ),
+                        html.Div(id='output-data-upload'),
+                        dcc.Graph(id='graph', style={'height': '80vh'}, # 80% of vertical height
                         config={
                             'staticPlot': False,        # check if we can use static plot
                             'scrollZoom': True,         # zoom with scroll
@@ -299,7 +325,15 @@ class object2DVisualizer:
                 return {'background-color': 'green'}
 
     def set_dash_app_callback(self):
-        # set callback
+        # upload callback
+        @self.app.callback(Output('output-data-upload', 'children'),
+              Input('upload-data', 'contents'),
+              State('upload-data', 'filename'))
+        def update_output(contents, filename):
+            if contents is not None:
+                return self.parse_contents(contents, filename)
+
+        # draw callback
         @self.app.callback(
         Output('graph', 'figure'),
         [Input('slider', 'value'),
@@ -528,10 +562,6 @@ def main(rosbag_file_path: str = "", topics: list = []):
     Args:
         rosbag_file_path (str, optional): _description_. Defaults to "".
     """
-            # create dummy data
-    if rosbag_file_path == "":
-        rosbag_file_path = "dummy"
-        rosbag_file_path = "/home/yoshiri/autoware/inittest/rosbag2_2023_05_09-09_24_48_0.db3"
 
     visualizer = object2DVisualizer(rosbag_file_path, topics)
     visualizer.run_server()
@@ -541,7 +571,7 @@ def main(rosbag_file_path: str = "", topics: list = []):
 if __name__ == '__main__':
     import argparse
     p = argparse.ArgumentParser()
-    p.add_argument("--rosbag", type=str, help="rosbag file path", default="")
+    p.add_argument("--rosbag", type=str, help="rosbag file path", default="dummy")
     p.add_argument("--topics", nargs='+', help='List of strings', default=[])
 
     args = p.parse_args()
