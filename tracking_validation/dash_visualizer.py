@@ -45,6 +45,11 @@ class DataForVisualize:
         self.data["width"] = width
         self.data["topic_name"] = topic_name
         self.data["uuid"] = uuid
+        self.data["cov_x"] = 0.0
+        self.data["cov_y"] = 0.0
+        self.data["cov_yaw"] = 0.0
+        self.data["cov_vx"] = 0.0
+        self.data["cov_omega"] = 0.0
         self.refine_uuid()
     
     def setTopicName(self, topic_name):
@@ -63,6 +68,11 @@ class DataForVisualize:
         twist = getTwist(perception_object)
         self.data["vx"] = twist[0]
         self.data["omega"] = twist[5]
+        self.data["cov_x"] = perception_object.kinematics.pose_with_covariance.covariance[0]
+        self.data["cov_y"] = perception_object.kinematics.pose_with_covariance.covariance[7]
+        self.data["cov_yaw"] = perception_object.kinematics.pose_with_covariance.covariance[35]
+        self.data["cov_vx"] = perception_object.kinematics.twist_with_covariance.covariance[0]
+        self.data["cov_omega"] = perception_object.kinematics.twist_with_covariance.covariance[35]
         if type(perception_object) == DetectedObject:
             self.data["uuid"] = []
         else:
@@ -304,7 +314,12 @@ class object2DVisualizer:
                     {'label': 'width', 'value': 'width'},
                     {'label': 'vx', 'value': 'vx'},
                     {'label': 'omega', 'value': 'omega'},
-                    {'label': 'elapsed_time', 'value': 'elapsed_time'}
+                    {'label': 'elapsed_time', 'value': 'elapsed_time'},
+                    {'label': 'cov_x', 'value': 'cov_x'},
+                    {'label': 'cov_y', 'value': 'cov_y'},
+                    {'label': 'cov_yaw', 'value': 'cov_yaw'},
+                    {'label': 'cov_vx', 'value': 'cov_vx'},
+                    {'label': 'cov_omega', 'value': 'cov_omega'},
                 ],
                 value='yaw'  # デフォルトの値
             ),
